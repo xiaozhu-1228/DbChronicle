@@ -1,0 +1,49 @@
+name: dbchronicle
+
+on:
+  push:
+    paths:
+      - 'Src/**'
+      - 'Test/**'
+      - 'Test/samples/**'
+      - '.github/workflows/dbchronicle.yml'
+  pull_request:
+    paths:
+      - 'Src/**'
+      - 'Test/**'
+      - 'Test/samples/**'
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Build
+        run: dotnet build Src/DbChronicle.sln -c Release
+
+      - name: Test
+        run: dotnet test Src/DbChronicle.sln -c Release --no-build
+
+      - name: Demo (SQLite end-to-end)
+        run: dotnet run --project Test/DbChronicle.Demo -c Release --no-build
+
+      - name: Compile all dialects
+        run: dotnet run --project Src/DbChronicle.Cli -c Release --no-build -- compile --config Test/samples/DbchronicleConfig.xml --all-dialects
+
+      - name: Check migrations
+        run: dotnet run --project Src/DbChronicle.Cli -c Release --no-build -- check --config Test/samples/DbchronicleConfig.xml
+
+      - name: License scan (reject GPL / AGPL)
+        run: |
+          dotnet list Src/DbChronicle.sln package --include-transitive > packages.txt
+          if grep -Eiq '\b(AGPL|GPL)\b' packages.txt; then
+            echo "发现 GPL/AGPL 依赖，违反合规要求"
+            grep -Ei '\b(AGPL|GPL)\b' packages.txt
+            exit 1
+          fi
+          echo "许可证扫描通过"

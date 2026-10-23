@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <RootNamespace>DbChronicle.Cli</RootNamespace>
+    <AssemblyName>db-chronicle</AssemblyName>
+    <RollForward>Major</RollForward>
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>db-chronicle</ToolCommandName>
+    <PackageId>DbChronicle.Cli</PackageId>
+    <Version>1.0.0</Version>
+    <Description>数据库版本托管与升级工具集</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\DbChronicle\DbChronicle.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- 数据库驱动只属于 CLI（SQL 执行工具），核心库不引用 -->
+    <PackageReference Include="MySqlConnector" Version="2.3.7" />
+    <PackageReference Include="Npgsql" Version="6.0.9" />
+    <PackageReference Include="Microsoft.Data.SqlClient" Version="5.1.5" />
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.10" />
+  </ItemGroup>
+
+</Project>

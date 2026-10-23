@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <RootNamespace>DbChronicle</RootNamespace>
+    <AssemblyName>DbChronicle</AssemblyName>
+    <PackageId>DbChronicle</PackageId>
+    <Version>1.0.0</Version>
+    <Description>数据库版本托管与升级工具集核心库：逻辑模型 XML → 方言 SQL（编译、检查、版本编排、C# 反向扫描），不含数据库驱动</Description>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <!-- 核心库零第三方依赖：不引用任何数据库驱动，也不引用宿主框架 -->
+  <ItemGroup>
+    <Compile Remove="Hosting\**\*.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Resources\dialects\*.types.xml" LogicalName="DbChronicle.dialects.%(Filename)%(Extension)" />
+  </ItemGroup>
+
+</Project>

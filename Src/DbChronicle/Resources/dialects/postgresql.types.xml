@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<types dialect="postgresql">
+  <type logical="Boolean" sql="BOOLEAN" />
+  <type logical="Int8" sql="SMALLINT" />
+  <type logical="Int16" sql="SMALLINT" />
+  <type logical="Int32" sql="INTEGER" />
+  <type logical="Int64" sql="BIGINT" />
+  <type logical="Float32" sql="REAL" />
+  <type logical="Float64" sql="DOUBLE PRECISION" />
+  <type logical="Decimal" sql="NUMERIC({precision},{scale})" />
+  <type logical="FixedString" sql="CHAR({length})" />
+  <type logical="String" sql="VARCHAR({length})" />
+  <type logical="Text" sql="TEXT" />
+  <type logical="Json" sql="JSONB" />
+  <type logical="Xml" sql="XML" />
+  <type logical="DateTime" sql="TIMESTAMP" />
+  <type logical="DateTimeOffset" sql="TIMESTAMPTZ" />
+  <type logical="Date" sql="DATE" />
+  <type logical="Time" sql="TIME" />
+  <type logical="Binary" sql="BYTEA" />
+  <type logical="Blob" sql="BYTEA" />
+  <type logical="Uuid" sql="UUID" />
+</types>

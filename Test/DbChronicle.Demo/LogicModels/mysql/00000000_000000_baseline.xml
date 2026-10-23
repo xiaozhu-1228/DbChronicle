@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  【基线文件】已冻结，禁止修改。
+  按 snibemiddlewaredb.abnor_msg 的现有结构生成（初次接入时的快照）。
+-->
+<changeUnit id="00000000_000000_baseline" author="scanner" release="00000000">
+  <description>基线：从 MySQL 现有结构生成（abnor_msg）</description>
+  <table name="abnor_msg" action="CREATE">
+    <column name="id" action="ADD" type="Int32" nullable="false" primaryKey="true" autoIncrement="true"/>
+    <column name="smpinfodbid" action="ADD" type="String" length="255" nullable="true" charset="utf8" collate="utf8_general_ci"/>
+    <column name="msg" action="ADD" type="String" length="255" nullable="true" charset="utf8" collate="utf8_general_ci"/>
+    <column name="type" action="ADD" type="String" length="128" nullable="true" charset="utf8" collate="utf8_general_ci"/>
+    <column name="inserttime" action="ADD" type="DateTime" nullable="true" defaultValue="CURRENT_TIMESTAMP"/>
+    <column name="isprocessed" action="ADD" type="Int32" nullable="true"/>
+    <column name="processedtime" action="ADD" type="DateTime" nullable="true"/>
+    <column name="updatetime" action="ADD" type="DateTime" nullable="true" defaultValue="CURRENT_TIMESTAMP"/>
+  </table>
+</changeUnit>

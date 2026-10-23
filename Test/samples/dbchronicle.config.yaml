@@ -1,0 +1,28 @@
+component:
+  name: DbChronicle
+  version: 1.0.0
+
+database:
+  dialect: mysql
+  version: "8.0"
+
+environment: dev
+
+paths:
+  migrations: ./migrations
+  version_log: ./version_log/${environment}
+  output: ./output
+
+baseline:
+  file: migrations/00000000_000000_baseline.xml
+  frozen: true
+  frozen_at: "2026-10-22"
+
+options:
+  quoteIdentifiers: true
+  includeComments: true
+  includeRollback: false
+  statementDelimiter: ";"
+  allowDestructive: false
+  lockTimeoutSeconds: 10
+  incrementalModify: true

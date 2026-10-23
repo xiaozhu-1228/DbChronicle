@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<types dialect="sqlite">
+  <type logical="Boolean" sql="INTEGER" />
+  <type logical="Int8" sql="INTEGER" />
+  <type logical="Int16" sql="INTEGER" />
+  <type logical="Int32" sql="INTEGER" />
+  <type logical="Int64" sql="INTEGER" />
+  <type logical="Float32" sql="REAL" />
+  <type logical="Float64" sql="REAL" />
+  <type logical="Decimal" sql="NUMERIC" />
+  <type logical="FixedString" sql="TEXT" />
+  <type logical="String" sql="TEXT" />
+  <type logical="Text" sql="TEXT" />
+  <type logical="Json" sql="TEXT" />
+  <type logical="Xml" sql="TEXT" />
+  <type logical="DateTime" sql="TEXT" />
+  <type logical="DateTimeOffset" sql="TEXT" />
+  <type logical="Date" sql="TEXT" />
+  <type logical="Time" sql="TEXT" />
+  <type logical="Binary" sql="BLOB" />
+  <type logical="Blob" sql="BLOB" />
+  <type logical="Uuid" sql="TEXT" />
+</types>

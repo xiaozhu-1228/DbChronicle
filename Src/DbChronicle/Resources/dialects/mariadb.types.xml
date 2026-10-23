@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<types dialect="mariadb">
+  <type logical="Boolean" sql="TINYINT(1)" />
+  <type logical="Int8" sql="TINYINT" />
+  <type logical="Int16" sql="SMALLINT" />
+  <type logical="Int32" sql="INT" />
+  <type logical="Int64" sql="BIGINT" />
+  <type logical="Float32" sql="FLOAT" />
+  <type logical="Float64" sql="DOUBLE" />
+  <type logical="Decimal" sql="DECIMAL({precision},{scale})" />
+  <type logical="FixedString" sql="CHAR({length})" />
+  <type logical="String" sql="VARCHAR({length})" />
+  <type logical="Text" sql="LONGTEXT" />
+  <type logical="Json" sql="LONGTEXT" />
+  <type logical="Xml" sql="LONGTEXT" />
+  <type logical="DateTime" sql="DATETIME" />
+  <type logical="DateTimeOffset" sql="TIMESTAMP" />
+  <type logical="Date" sql="DATE" />
+  <type logical="Time" sql="TIME" />
+  <type logical="Binary" sql="VARBINARY({length})" />
+  <type logical="Blob" sql="LONGBLOB" />
+  <type logical="Uuid" sql="CHAR(36)" />
+</types>

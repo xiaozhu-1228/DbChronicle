@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <AssemblyName>DbChronicle.Demo</AssemblyName>
+    <RootNamespace>DbChronicle.Demo</RootNamespace>
+    <InvariantGlobalization>false</InvariantGlobalization>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Src\DbChronicle\DbChronicle.csproj" />
+    <ProjectReference Include="..\..\Src\DbChronicle.Cli\DbChronicle.Cli.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="LogicModels\**\*.xml" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="Config\**\*.xml" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="Config\dbchronicle.mysql.yaml">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+</Project>

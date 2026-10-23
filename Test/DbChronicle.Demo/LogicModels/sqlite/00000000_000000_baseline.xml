@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  【基线文件】已冻结，禁止修改。
+  后续所有结构变更请新增增量变更单元文件。
+-->
+<changeUnit id="00000000_000000_baseline" author="demo" release="00000000">
+  <description>基线：用户表</description>
+  <table name="nor_user" action="CREATE" comment="用户表">
+    <column name="id" action="ADD" type="Int64" primaryKey="true" autoIncrement="true" nullable="false"/>
+    <column name="name" action="ADD" type="String" length="64" nullable="false" comment="用户名"/>
+    <column name="email" action="ADD" type="String" length="128" nullable="true" defaultValue="''" comment="邮箱"/>
+  </table>
+</changeUnit>

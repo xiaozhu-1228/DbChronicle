@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<types dialect="sqlserver">
+  <type logical="Boolean" sql="BIT" />
+  <type logical="Int8" sql="TINYINT" />
+  <type logical="Int16" sql="SMALLINT" />
+  <type logical="Int32" sql="INT" />
+  <type logical="Int64" sql="BIGINT" />
+  <type logical="Float32" sql="REAL" />
+  <type logical="Float64" sql="FLOAT" />
+  <type logical="Decimal" sql="DECIMAL({precision},{scale})" />
+  <type logical="FixedString" sql="NCHAR({length})" />
+  <type logical="String" sql="NVARCHAR({length})" />
+  <type logical="Text" sql="NVARCHAR(MAX)" />
+  <type logical="Json" sql="NVARCHAR(MAX)" />
+  <type logical="Xml" sql="XML" />
+  <type logical="DateTime" sql="DATETIME2" />
+  <type logical="DateTimeOffset" sql="DATETIMEOFFSET" />
+  <type logical="Date" sql="DATE" />
+  <type logical="Time" sql="TIME" />
+  <type logical="Binary" sql="VARBINARY({length})" />
+  <type logical="Blob" sql="VARBINARY(MAX)" />
+  <type logical="Uuid" sql="UNIQUEIDENTIFIER" />
+</types>

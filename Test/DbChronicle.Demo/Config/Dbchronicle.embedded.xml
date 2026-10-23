@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<dbchronicle>
+  <component name="DbChronicle" version="1.0.0" />
+  <database dialect="mysql" version="8.0" />
+  <environment>embedded</environment>
+  <paths migrations="../LogicModels/embedded"
+         versionLog="./version_log/${environment}"
+         output="./output" />
+  <baseline file="../LogicModels/embedded/00000000_000000_baseline.xml" frozen="false" frozenAt="" />
+  <options quoteIdentifiers="true" includeComments="true" includeRollback="false"
+           statementDelimiter=";" allowDestructive="false"
+           lockTimeoutSeconds="10" incrementalModify="true" />
+</dbchronicle>

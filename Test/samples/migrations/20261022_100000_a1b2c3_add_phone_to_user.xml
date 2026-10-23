@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  本变更单元一旦应用（写入 version_log），文件即不可修改。
+  修正错误请新增变更单元文件，并用 <depends on="本文件 id"/> 声明依赖。
+-->
+<changeUnit id="20261022_100000_a1b2c3" author="tester" release="20261022">
+  <description>用户表增加手机号并调整邮箱长度</description>
+
+  <table name="nor_user" action="ALTER">
+    <column name="phone" action="ADD" type="String" length="20" nullable="true" comment="手机号"/>
+
+    <!-- 增量写法：只声明 length，其余属性（NOT NULL / DEFAULT / COMMENT）由累积模型补全 -->
+    <column name="email" action="MODIFY" length="200"/>
+  </table>
+</changeUnit>
