@@ -3647,8 +3647,8 @@ CI 流水线调用 `DbChronicle.Cli` 工具，连接信息通过 Secrets 注入�
 - [x] 连接信息交互式输入 + 环境变量
 - [x] 基线冻结机制
 - [x] Core 库公开 `ChangeUnitFactory.Create()` API
-- [x] Pre-commit 钩子脚本
-- [x] IDE 模板（VS Code / Rider）
+- [ ] Pre-commit 钩子脚本（由使用方在自己仓库按需配置，工具仓库不再附带）
+- [ ] IDE 模板（由 `db-chronicle new` 生成，不再提供静态模板文件）
 - [x] 方言感知的 SQL 语句拆分器（引号 / 注释 / 块 / `DELIMITER` / `GO` / `$$`）
 - [x] 库级互斥锁（PG 咨询锁 / MySQL `GET_LOCK` / SQL Server `sp_getapplock` / SQLite 文件锁）
 - [x] SQL 快照落盘 + 补生成来源分级
@@ -3977,8 +3977,6 @@ Src/
 │   ├── Api/                           IDbChronicle / DbChronicleFactory / Options / Result
 │   └── Resources/dialects/            五方言类型映射（嵌入资源）
 ├── DbChronicle.Cli/                   net8.0 命令行（dotnet tool: DbChronicle.Cli）
-├── scripts/                           pre-commit 钩子（sh / ps1）
-├── templates/                         IDE / 手工模板
 └── Tests/                             测试（四个程序集，解决方案内同一文件夹）
     ├── DbChronicle.Tests/        单元：解析、编译、方言、拆分、检查、回滚
     ├── DbChronicle.Scanner.CSharp.Tests/  单元：反向工程（类型映射 / 特性读取 / XML）
@@ -4083,9 +4081,7 @@ Test/
 
 | 交付物                        | 路径                                                                                  | 说明                                                                                                                                                                                                                                         |
 | ----------------------------- | ------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Pre-commit 钩子（POSIX）      | `Src/scripts/pre-commit`                                                              | 提交前跑 `check`，未安装 CLI 时跳过                                                                                                                                                                                                          |
-| Pre-commit 钩子（PowerShell） | `Src/scripts/pre-commit.ps1`                                                          | Windows 版本                                                                                                                                                                                                                                 |
-| IDE / 手工模板                | `Src/templates/migration-template.xml`                                                | 复制后改名，或用 `db-chronicle new`                                                                                                                                                                                                          |
+| 变更单元生成                 | `db-chronicle new --desc "…"`                                                          | 生成符合命名规范的文件（`FileMode.CreateNew`，绝不覆盖）；不再提供模板文件与钩子脚本                                                                                                                                                        |
 | 示例工程                      | `Test/samples/`（config + 基线 + 增量）                                               | 与 demo / 集成测试同处 Test 下，可直接 `compile --all-dialects` / `check`                                                                                                                                                                    |
 | 宿主启动升级示例              | 文档 §6.2（宿主自写 `IHostedService` 调 `IDbChronicle.DbUpgrade()`）                  | 组件不内置启动钩子，升级时机由宿主决定                                                                                                                                                                                                       |
 | 可运行演示                    | `Test/DbChronicle.Demo`（默认 MySQL / `--sqlite` / `--embedded` / `--config <path>`） | 配置随项目发布：`Test/DbChronicle.Demo/Config/dbchronicle.{mysql,sqlite,embedded}.yaml`，逻辑模型取 `LogicModels/{mysql,sqlite,embedded}/`；`--config <path>` 覆盖内置配置（不生成任何文件）；`--apply` 才落库，`--reset` 仅重建嵌入式演示库 |

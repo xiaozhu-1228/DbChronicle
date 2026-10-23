@@ -2,7 +2,6 @@ using System;
 using System.IO;
 using System.Threading;
 using DbChronicle.Abstractions.Execution;
-using DbChronicle.Runtime.Execution;
 using Microsoft.Data.Sqlite;
 
 namespace DbChronicle.Executor.AdoNet

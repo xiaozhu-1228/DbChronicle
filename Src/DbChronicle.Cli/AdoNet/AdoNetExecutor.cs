@@ -1,9 +1,7 @@
 using System;
 using System.Collections.Generic;
-using System.Data;
 using System.Data.Common;
 using DbChronicle.Abstractions.Execution;
-using DbChronicle.Runtime.Execution;
 
 namespace DbChronicle.Executor.AdoNet
 {

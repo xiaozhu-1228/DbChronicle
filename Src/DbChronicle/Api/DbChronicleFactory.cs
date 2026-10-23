@@ -4,10 +4,6 @@ using System.Linq;
 using System.Text;
 using DbChronicle.Compilation.Checking;
 using DbChronicle.Abstractions.Diagnostics;
-using DbChronicle.Compilation.Compiler;
-using DbChronicle.Compilation.Splitting;
-using DbChronicle.Domain.Sql;
-using DbChronicle.Domain.Structures;
 using DbChronicle.Configuration;
 using DbChronicle.Abstractions.Execution;
 using DbChronicle.Runtime.Execution;
@@ -16,10 +12,6 @@ using DbChronicle.Parsing;
 using DbChronicle.Abstractions.Versioning;
 using DbChronicle.Runtime.Versioning;
 
-using DbChronicle.Compilation.Dialects;
-using DbChronicle.Domain.Operations;
-using DbChronicle.Runtime.Rollback;
-using DbChronicle.Runtime.Naming;
 namespace DbChronicle
 {
     /// <summary>

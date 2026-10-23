@@ -8,21 +8,9 @@ using System.Text;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
 using DbChronicle.Abstractions.Diagnostics;
-using DbChronicle.Compilation.Compiler;
-using DbChronicle.Compilation.Splitting;
-using DbChronicle.Domain.Sql;
-using DbChronicle.Domain.Structures;
 using DbChronicle.Configuration;
 using DbChronicle.Domain.Model;
 using DbChronicle.Domain.Operations;
-
-using DbChronicle.Abstractions.Execution;
-using DbChronicle.Abstractions.Versioning;
-using DbChronicle.Compilation.Dialects;
-using DbChronicle.Runtime.Execution;
-using DbChronicle.Runtime.Versioning;
-using DbChronicle.Runtime.Rollback;
-using DbChronicle.Runtime.Naming;
 namespace DbChronicle.Parsing
 {
     public sealed class ChangeUnitParser

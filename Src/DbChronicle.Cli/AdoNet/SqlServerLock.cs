@@ -1,6 +1,5 @@
 using System;
 using DbChronicle.Abstractions.Execution;
-using DbChronicle.Runtime.Execution;
 using Microsoft.Data.SqlClient;
 
 namespace DbChronicle.Executor.AdoNet

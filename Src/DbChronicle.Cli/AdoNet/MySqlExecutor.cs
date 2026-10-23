@@ -1,8 +1,6 @@
 using System;
 using System.Collections.Generic;
-using System.Data;
 using DbChronicle.Abstractions.Execution;
-using DbChronicle.Runtime.Execution;
 using MySqlConnector;
 
 namespace DbChronicle.Executor.AdoNet

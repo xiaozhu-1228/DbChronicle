@@ -6,8 +6,6 @@ using System.Text;
 using DbChronicle.Compilation.Checking;
 using DbChronicle.Abstractions.Diagnostics;
 using DbChronicle.Compilation.Compiler;
-using DbChronicle.Compilation.Splitting;
-using DbChronicle.Domain.Sql;
 using DbChronicle.Domain.Structures;
 using DbChronicle.Configuration;
 using DbChronicle.Compilation.Dialects;

@@ -1,7 +1,6 @@
 using System;
 using System.Threading;
 using DbChronicle.Abstractions.Execution;
-using DbChronicle.Runtime.Execution;
 using Npgsql;
 
 namespace DbChronicle.Executor.AdoNet

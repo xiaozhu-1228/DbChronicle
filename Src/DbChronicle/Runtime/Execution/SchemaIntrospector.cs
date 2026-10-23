@@ -1,21 +1,8 @@
 using System;
 using System.Collections.Generic;
-using DbChronicle.Abstractions.Diagnostics;
-using DbChronicle.Compilation.Compiler;
-using DbChronicle.Compilation.Splitting;
-using DbChronicle.Domain.Sql;
 using DbChronicle.Domain.Structures;
-using DbChronicle.Abstractions.Versioning;
-using DbChronicle.Runtime.Versioning;
-
 using DbChronicle.Abstractions.Execution;
-using DbChronicle.Compilation.Dialects;
-using DbChronicle.Configuration;
-using DbChronicle.Domain.Model;
-using DbChronicle.Domain.Operations;
-using DbChronicle.Runtime.Execution;
-using DbChronicle.Runtime.Rollback;
-using DbChronicle.Runtime.Naming;
+
 namespace DbChronicle.Runtime.Execution
 {
     public sealed class DriftReport
