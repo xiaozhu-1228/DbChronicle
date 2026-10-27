@@ -1,4 +1,5 @@
 using System;
+
 using DbChronicle.Configuration;
 
 namespace DbChronicle.Cli
@@ -9,15 +10,23 @@ namespace DbChronicle.Cli
 
         public static string Resolve(DbChronicleConfig config)
         {
+            return Resolve(config, () => Console.IsInputRedirected, Prompt);
+        }
+
+        /// <summary>
+        /// 可测试重载：交互判定与提示函数由调用方注入，默认路径见 <see cref="Resolve(DbChronicleConfig)"/>。
+        /// </summary>
+        public static string Resolve(DbChronicleConfig config, Func<bool> isInputRedirected, Func<DbChronicleConfig, string> prompt)
+        {
             var fromEnvironment = Environment.GetEnvironmentVariable(EnvironmentVariable);
             if (!string.IsNullOrEmpty(fromEnvironment))
             {
                 return fromEnvironment;
             }
 
-            if (!Console.IsInputRedirected)
+            if (!isInputRedirected())
             {
-                return Prompt(config);
+                return prompt(config);
             }
 
             throw new InvalidOperationException("非交互环境未找到连接信息。请设置 " + EnvironmentVariable + " 环境变量。");

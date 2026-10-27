@@ -1,8 +1,10 @@
 using System.IO;
 using System.Linq;
+
 using DbChronicle.Compilation.Dialects;
+using DbChronicle.Migrations.Rollback;
+using DbChronicle.Models;
 using DbChronicle.Parsing;
-using DbChronicle.Runtime.Rollback;
 using Xunit;
 
 namespace DbChronicle.Tests

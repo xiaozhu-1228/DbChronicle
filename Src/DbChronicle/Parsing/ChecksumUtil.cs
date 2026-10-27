@@ -1,6 +1,7 @@
 using System.IO;
 using System.Security.Cryptography;
 using System.Text;
+
 namespace DbChronicle.Parsing
 {
     public static class ChecksumUtil

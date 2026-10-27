@@ -1,14 +1,15 @@
-using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System;
+
 using DbChronicle.Configuration;
-using DbChronicle.Abstractions.Execution;
-using DbChronicle.Runtime.Execution;
-using DbChronicle.Parsing;
-using DbChronicle.Abstractions.Versioning;
-using DbChronicle.Runtime.Versioning;
+using DbChronicle.Execution;
 using DbChronicle.Executor.AdoNet;
+using DbChronicle.Migrations.Executor;
+using DbChronicle.Migrations.State;
+using DbChronicle.Models;
+using DbChronicle.Parsing;
 using Microsoft.Data.Sqlite;
 using Xunit;
 
@@ -113,7 +114,7 @@ namespace DbChronicle.IntegrationTests
             }
 
             var compiled = TestSupport.CompileWith("sqlite",
-                unit, true, new DbChronicle.Domain.Structures.StructureModelBuilder().Build(units, unit.Id));
+                unit, true, new StructureModelBuilder().Build(units, unit.Id));
 
             using (var executor = new SqliteExecutor(connectionString))
             {
@@ -132,7 +133,7 @@ namespace DbChronicle.IntegrationTests
             Assert.True(ColumnExists(dbPath, "nor_user", "email"));
         }
 
-        private static ApplyResult Apply(DbChronicleConfig config, IReadOnlyList<DbChronicle.Domain.Model.ChangeUnit> units,
+        private static ApplyResult Apply(DbChronicleConfig config, IReadOnlyList<ChangeUnit> units,
             string dbPath, bool restart, bool noTransaction = false)
         {
             var factory = new AdoNetExecutorFactory("sqlite");
@@ -151,7 +152,7 @@ namespace DbChronicle.IntegrationTests
             });
         }
 
-        private static DbChronicle.Domain.Model.ChangeUnit FindUnit(IReadOnlyList<DbChronicle.Domain.Model.ChangeUnit> units, string id)
+        private static ChangeUnit FindUnit(IReadOnlyList<ChangeUnit> units, string id)
         {
             foreach (var unit in units)
             {
@@ -256,78 +257,4 @@ namespace DbChronicle.IntegrationTests
         }
     }
 
-    internal sealed class NoTransactionExecutorFactory : IDbExecutorFactory
-    {
-        private readonly IDbExecutorFactory _inner;
-
-        public NoTransactionExecutorFactory(IDbExecutorFactory inner)
-        {
-            _inner = inner;
-        }
-
-        public string DialectName
-        {
-            get { return _inner.DialectName; }
-        }
-
-        public IDbExecutor Create(string connectionString)
-        {
-            return new NoTransactionExecutor(_inner.Create(connectionString));
-        }
-    }
-
-    internal sealed class NoTransactionExecutor : IDbExecutor
-    {
-        private readonly IDbExecutor _inner;
-
-        public NoTransactionExecutor(IDbExecutor inner)
-        {
-            _inner = inner;
-        }
-
-        public string DialectName
-        {
-            get { return _inner.DialectName; }
-        }
-
-        public bool SupportsTransactionalDdl
-        {
-            get { return false; }
-        }
-
-        public void Execute(string sql)
-        {
-            _inner.Execute(sql);
-        }
-
-        public object Scalar(string sql)
-        {
-            return _inner.Scalar(sql);
-        }
-
-        public List<Dictionary<string, object>> Query(string sql)
-        {
-            return _inner.Query(sql);
-        }
-
-        public void BeginTransaction()
-        {
-            _inner.BeginTransaction();
-        }
-
-        public void Commit()
-        {
-            _inner.Commit();
-        }
-
-        public void Rollback()
-        {
-            _inner.Rollback();
-        }
-
-        public void Dispose()
-        {
-            _inner.Dispose();
-        }
-    }
 }

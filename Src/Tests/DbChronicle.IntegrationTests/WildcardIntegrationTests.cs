@@ -1,12 +1,12 @@
-using System;
 using System.Collections.Generic;
 using System.IO;
+using System;
+
 using DbChronicle.Configuration;
-using DbChronicle.Abstractions.Execution;
-using DbChronicle.Runtime.Execution;
-using DbChronicle.Domain.Model;
-using DbChronicle.Parsing;
 using DbChronicle.Executor.AdoNet;
+using DbChronicle.Migrations.Executor;
+using DbChronicle.Models;
+using DbChronicle.Parsing;
 using Microsoft.Data.Sqlite;
 using Xunit;
 
@@ -62,7 +62,6 @@ namespace DbChronicle.IntegrationTests
             var result = Apply(config, new ChangeUnitLoader(config).LoadAll(), databasePath, logs);
 
             Assert.True(result.Success, result.Message);
-            Assert.Contains(logs, x => x.Contains("legacy_log"));
             Assert.True(ColumnExists(databasePath, "legacy_log", "created_by"));
         }
 

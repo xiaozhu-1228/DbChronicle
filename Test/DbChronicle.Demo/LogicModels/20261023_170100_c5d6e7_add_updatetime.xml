@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<changeUnit id="20261023_170100_c5d6e7" author="demo" release="20261023">
+  <description>所有表补充 updatetime 字段</description>
+
+  <table name="*" action="ALTER">
+    <column name="updatetime" action="ADD" type="DateTimeOffset"
+            nullable="false" defaultValue="CURRENT_TIMESTAMP"
+            onUpdate="CURRENT_TIMESTAMP"
+            comment="更新时间（UTC，带时区）"/>
+  </table>
+</changeUnit>

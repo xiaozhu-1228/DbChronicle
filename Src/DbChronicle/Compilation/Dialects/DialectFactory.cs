@@ -1,5 +1,5 @@
-using System;
 using System.Collections.Generic;
+using System;
 
 namespace DbChronicle.Compilation.Dialects
 {
@@ -46,4 +46,3 @@ namespace DbChronicle.Compilation.Dialects
     }
 
 }
-

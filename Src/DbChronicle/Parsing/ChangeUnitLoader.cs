@@ -1,10 +1,10 @@
-using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using DbChronicle.Domain.Structures;
+using System;
+
 using DbChronicle.Configuration;
-using DbChronicle.Domain.Model;
+using DbChronicle.Models;
 
 namespace DbChronicle.Parsing
 {

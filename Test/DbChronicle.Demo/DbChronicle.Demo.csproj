@@ -11,8 +11,9 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- Demo 只依赖核心库 + 执行器库，不引用 CLI（证明宿主可脱离 CLI 使用） -->
     <ProjectReference Include="..\..\Src\DbChronicle\DbChronicle.csproj" />
-    <ProjectReference Include="..\..\Src\DbChronicle.Cli\DbChronicle.Cli.csproj" />
+    <ProjectReference Include="..\..\Src\DbChronicle.Executor.AdoNet\DbChronicle.Executor.AdoNet.csproj" />
   </ItemGroup>
 
   <ItemGroup>
@@ -21,9 +22,34 @@
   </ItemGroup>
 
   <ItemGroup>
-    <None Update="Config\dbchronicle.mysql.yaml">
+    <None Remove="Config\DbchronicleConfig.xml" />
+    <None Remove="LogicModels\20261023_170000_b4c5d6_add_base_entity_fields.xml" />
+    <None Remove="LogicModels\20261023_170000_b4c5d6_add_createtime.xml" />
+    <None Remove="LogicModels\20261023_170100_c5d6e7_add_updatetime.xml" />
+    <None Remove="LogicModels\20261023_170200_d6e7f8_add_isdeleted.xml" />
+    <None Remove="LogicModels\20261023_170300_e7f8a9_add_deletetime.xml" />
+    <None Remove="LogicModels\20261023_170400_f8a9ba_add_id.xml" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="Config\DbchronicleConfig.xml">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </None>
+    </Content>
+    <Content Include="LogicModels\20261023_170000_b4c5d6_add_createtime.xml">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="LogicModels\20261023_170100_c5d6e7_add_updatetime.xml">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="LogicModels\20261023_170200_d6e7f8_add_isdeleted.xml">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="LogicModels\20261023_170300_e7f8a9_add_deletetime.xml">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+    <Content Include="LogicModels\20261023_170400_f8a9ba_add_id.xml">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
   </ItemGroup>
 
 </Project>

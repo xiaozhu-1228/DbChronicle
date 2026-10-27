@@ -1,8 +1,8 @@
-using System;
 using System.IO;
+using System;
+
 using DbChronicle.Configuration;
-using DbChronicle.Abstractions.Versioning;
-using DbChronicle.Runtime.Versioning;
+using DbChronicle.Migrations.State;
 using Xunit;
 
 namespace DbChronicle.Tests

@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <IsPackable>false</IsPackable>
+    <AssemblyName>DbChronicle.Cli.Tests</AssemblyName>
+    <RootNamespace>DbChronicle.Cli.Tests</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
+    <PackageReference Include="xunit" Version="2.9.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\DbChronicle.Cli\DbChronicle.Cli.csproj" />
+    <ProjectReference Include="..\..\DbChronicle\DbChronicle.csproj" />
+    <!-- CLI 的按需扩展（源码扫描器）显式引用，避免传递依赖的资产解析问题 -->
+    <ProjectReference Include="..\..\DbChronicle.Scanner.Source\DbChronicle.Scanner.Source.csproj" />
+    <ProjectReference Include="..\..\DbChronicle.Scanner.Languages\DbChronicle.Scanner.Languages.csproj" />
+  </ItemGroup>
+
+</Project>

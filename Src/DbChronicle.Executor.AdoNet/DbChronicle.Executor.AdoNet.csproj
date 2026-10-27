@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <RootNamespace>DbChronicle.Executor.AdoNet</RootNamespace>
+    <AssemblyName>DbChronicle.Executor.AdoNet</AssemblyName>
+    <PackageId>DbChronicle.Executor.AdoNet</PackageId>
+    <Version>1.0.0</Version>
+    <Description>DbChronicle 的 ADO.NET 执行器与库级锁实现（MySQL / MariaDB / PostgreSQL / SQL Server / SQLite）</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\DbChronicle\DbChronicle.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- 数据库驱动只属于执行器库，核心库保持零第三方依赖 -->
+    <PackageReference Include="MySqlConnector" Version="2.3.7" />
+    <PackageReference Include="Npgsql" Version="6.0.9" />
+    <PackageReference Include="Microsoft.Data.SqlClient" Version="5.1.5" />
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.10" />
+  </ItemGroup>
+
+</Project>

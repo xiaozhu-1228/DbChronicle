@@ -1,9 +1,6 @@
 using System.Linq;
-using DbChronicle.Abstractions.Diagnostics;
+
 using DbChronicle.Compilation.Compiler;
-using DbChronicle.Compilation.Splitting;
-using DbChronicle.Domain.Sql;
-using DbChronicle.Domain.Structures;
 using Xunit;
 
 namespace DbChronicle.Tests
@@ -176,10 +173,78 @@ namespace DbChronicle.Tests
         public void UnknownTableAction_ShouldHintRawSql()
         {
             var unit = TestSupport.ParseSingle(
-                "  <table name=\"t\" action=\"ENGINE\"/>\n",
+                "  <table name=\"t\" action=\"PARTITION\"/>\n",
                 false);
 
             Assert.Contains(unit.Diagnostics, x => x.Code == "E012" && x.Message.Contains("rawSql"));
+        }
+
+        [Fact]
+        public void TableOptionWithoutAnyValue_ShouldFail()
+        {
+            var unit = TestSupport.ParseSingle(
+                "  <table name=\"t\" action=\"ENGINE\"/>\n",
+                false);
+
+            Assert.Contains(unit.Diagnostics, x => x.Code == "E050");
+        }
+
+        [Fact]
+        public void FunctionDefaults_ShouldNotBeQuoted()
+        {
+            var sql = TestSupport.CompileSql(
+                "  <table name=\"t\" action=\"ALTER\">\n"
+                + "    <column name=\"a\" action=\"ADD\" type=\"DateTime\" nullable=\"false\" defaultValue=\"UTC_TIMESTAMP()\"/>\n"
+                + "    <column name=\"b\" action=\"ADD\" type=\"DateTime\" nullable=\"false\" defaultValue=\"NOW()\"/>\n"
+                + "    <column name=\"c\" action=\"ADD\" type=\"String\" length=\"32\" nullable=\"true\" defaultValue=\"'UTC_TIMESTAMP()'\"/>\n"
+                + "  </table>",
+                false);
+
+            Assert.Contains("`a` DATETIME NOT NULL DEFAULT UTC_TIMESTAMP()", sql);
+            Assert.Contains("`b` DATETIME NOT NULL DEFAULT NOW()", sql);
+            // 显式带引号的仍是字符串字面量
+            Assert.Contains("`c` VARCHAR(32) NULL DEFAULT 'UTC_TIMESTAMP()'", sql);
+        }
+
+        [Fact]
+        public void Sqlite_ShouldPassThroughDatetimeNow()
+        {
+            var sql = TestSupport.CompileWith("sqlite", TestSupport.ParseSingle(
+                "  <table name=\"t\" action=\"ALTER\">\n"
+                + "    <column name=\"a\" action=\"ADD\" type=\"DateTime\" nullable=\"false\" defaultValue=\"datetime('now')\"/>\n"
+                + "  </table>",
+                false), false, null).Sql;
+
+            Assert.Contains("\"a\" TEXT NOT NULL DEFAULT datetime('now')", sql);
+        }
+
+        [Fact]
+        public void PostgreSql_ShouldPassThroughCurrentTimestampAtTimeZone()
+        {
+            var sql = TestSupport.CompileWith("postgresql", TestSupport.ParseSingle(
+                "  <table name=\"t\" action=\"ALTER\">\n"
+                + "    <column name=\"a\" action=\"ADD\" type=\"DateTimeOffset\" nullable=\"false\""
+                + " defaultValue=\"CURRENT_TIMESTAMP AT TIME ZONE 'UTC'\"/>\n"
+                + "  </table>",
+                false), false, null).Sql;
+
+            Assert.Contains("\"a\" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP AT TIME ZONE 'UTC'", sql);
+        }
+
+        [Fact]
+        public void BooleanDefaults_ShouldFollowDialect()
+        {
+            var unit = TestSupport.ParseSingle(
+                "  <table name=\"t\" action=\"ALTER\">\n"
+                + "    <column name=\"a\" action=\"ADD\" type=\"Boolean\" nullable=\"false\" defaultValue=\"true\"/>\n"
+                + "  </table>",
+                false);
+
+            var mySql = TestSupport.Compile(unit, false, null).Sql;
+            Assert.Contains("`a` TINYINT(1) NOT NULL DEFAULT 1", mySql);
+
+            var pg = TestSupport.CompileWith("postgresql", unit, false, null).Sql;
+            Assert.Contains("\"a\" BOOLEAN NOT NULL DEFAULT true", pg);
         }
     }
 }

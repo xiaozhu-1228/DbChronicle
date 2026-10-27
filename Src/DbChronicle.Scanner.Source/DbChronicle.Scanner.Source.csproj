@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <RootNamespace>DbChronicle.Scanner.Source</RootNamespace>
+    <AssemblyName>DbChronicle.Scanner.Source</AssemblyName>
+    <PackageId>DbChronicle.Scanner.Source</PackageId>
+    <Version>1.0.0</Version>
+    <Description>DbChronicle 的 C# 源码扫描器（Roslyn）：从源码直接生成基线草案，无需先编译</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\DbChronicle\DbChronicle.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Roslyn 只属于源码扫描器，核心库保持零第三方依赖 -->
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.13.0" />
+  </ItemGroup>
+
+</Project>

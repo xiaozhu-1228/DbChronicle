@@ -1,12 +1,13 @@
-using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Reflection;
 using System.Xml.Linq;
-using DbChronicle.Domain.Operations;
+using System;
 
-namespace DbChronicle.Compilation.Dialects 
+using DbChronicle.Common.Enums;
+
+namespace DbChronicle.Compilation.Dialects
 {
     public sealed class TypeMapper
     {
@@ -25,7 +26,7 @@ namespace DbChronicle.Compilation.Dialects
             string text = (dialectName ?? "").ToLowerInvariant();
             string name = "DbChronicle.dialects." + text + ".types.xml";
             Assembly assembly = typeof(TypeMapper).GetTypeInfo().Assembly;
-            using Stream stream = assembly.GetManifestResourceStream(name);
+using Stream stream = assembly.GetManifestResourceStream(name);
             if (stream == null)
             {
                 throw new InvalidOperationException("未内置方言类型映射：" + dialectName);
@@ -64,5 +65,3 @@ namespace DbChronicle.Compilation.Dialects
         }
     }
 }
-
-

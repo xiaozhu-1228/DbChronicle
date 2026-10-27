@@ -1,4 +1,6 @@
-using DbChronicle.Domain.Operations;
+using System.Collections.Generic;
+
+using DbChronicle.Models.Operations;
 
 namespace DbChronicle.Compilation.Dialects
 {
@@ -27,6 +29,12 @@ namespace DbChronicle.Compilation.Dialects
         string RenameTable(RenameTableOperation operation);
 
         string CommentTable(CommentTableOperation operation);
+
+        /// <summary>索引注释：MySQL / SQLite 不支持，PG 用 COMMENT ON INDEX，SQL Server 用扩展属性。</summary>
+        string CommentIndex(IndexOperation operation);
+
+        /// <summary>约束注释：MySQL / SQLite 不支持，PG 用 COMMENT ON CONSTRAINT，SQL Server 用扩展属性。</summary>
+        string CommentConstraint(ConstraintCommentOperation operation);
 
         string AddColumn(ColumnOperation operation);
 
@@ -66,6 +74,15 @@ namespace DbChronicle.Compilation.Dialects
 
         string DropDefaultConstraint(DefaultConstraintOperation operation);
 
+        /// <summary>视图（第 8 类）：按 Action 生成 CREATE / CREATE OR REPLACE / DROP。</summary>
+        string View(ViewOperation operation);
+
+        /// <summary>序列（第 9 类）：仅 PG / SQL Server 有原生对象，其余方言报错。</summary>
+        string Sequence(SequenceOperation operation);
+
+        /// <summary>表选项（第 1 类 1.5–1.7）：ENGINE / CHARSET / COLLATE / TABLESPACE。</summary>
+        string TableOption(TableOptionOperation operation);
+
         string RawSql(RawSqlOperation operation);
 
         string Update(UpdateOperation operation);
@@ -75,6 +92,12 @@ namespace DbChronicle.Compilation.Dialects
         string Clean(CleanOperation operation);
 
         string Backfill(BackfillOperation operation);
+
+        /// <summary>
+        /// 生成种子数据 SQL。primaryKeyColumns 为累积模型中该表的主键列（可能为空），
+        /// 供需要冲突目标（ON CONFLICT）的方言使用。
+        /// </summary>
+        string BuildSeed(SeedOperation operation, IReadOnlyList<string> primaryKeyColumns);
 
         bool RequiresRebuild(SchemaOperation operation);
 

@@ -1,9 +1,7 @@
 using System.Collections.Generic;
-using DbChronicle.Abstractions.Diagnostics;
-using DbChronicle.Compilation.Compiler;
-using DbChronicle.Compilation.Splitting;
-using DbChronicle.Domain.Sql;
-using DbChronicle.Domain.Structures;
+
+using DbChronicle.Diagnostics;
+using DbChronicle.Models;
 using Xunit;
 
 namespace DbChronicle.Tests

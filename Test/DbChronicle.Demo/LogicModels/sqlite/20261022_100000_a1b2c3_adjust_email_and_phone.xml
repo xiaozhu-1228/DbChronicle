@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<changeUnit id="20261022_100000_a1b2c3" author="demo" release="20261022">
-  <description>调整邮箱长度并加手机号</description>
-  <table name="nor_user" action="ALTER">
-    <!-- 增量写法：只声明 length，其余属性（可空/默认值/注释）由累积模型补全 -->
-    <column name="email" action="MODIFY" length="200"/>
-    <column name="phone" action="ADD" type="String" length="20" nullable="true" comment="手机号"/>
-  </table>
-</changeUnit>

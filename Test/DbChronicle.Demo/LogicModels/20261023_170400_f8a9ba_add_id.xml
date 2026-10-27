@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<changeUnit id="20261023_170400_f8a9ba" author="demo" release="20261023">
+  <description>缺少主键的表补充 id 字段</description>
+
+  <!--
+    仅适用于"没有主键、也没有 id 列"的表。业务表若已有 id 或其它主键，
+    ADD COLUMN id 会报 Duplicate column / Multiple primary key。
+    放在最后：apply 顺序执行、遇错即停，失败不影响前面四个字段单元。
+  -->
+  <table name="*" action="ALTER">
+    <column name="id" action="ADD" type="Int64"
+            primaryKey="true" autoIncrement="true" nullable="false"
+            comment="主键，自增"/>
+  </table>
+</changeUnit>

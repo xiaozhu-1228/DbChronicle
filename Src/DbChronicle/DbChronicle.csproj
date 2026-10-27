@@ -14,11 +14,7 @@
 
   <!-- 核心库零第三方依赖：不引用任何数据库驱动，也不引用宿主框架 -->
   <ItemGroup>
-    <Compile Remove="Hosting\**\*.cs" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <EmbeddedResource Include="Resources\dialects\*.types.xml" LogicalName="DbChronicle.dialects.%(Filename)%(Extension)" />
+    <EmbeddedResource Include="Common\Resources\dialects\*.types.xml" LogicalName="DbChronicle.dialects.%(Filename)%(Extension)" />
   </ItemGroup>
 
 </Project>

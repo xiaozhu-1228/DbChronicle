@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <RootNamespace>DbChronicle.Executor.EfCore</RootNamespace>
+    <AssemblyName>DbChronicle.Executor.EfCore</AssemblyName>
+    <PackageId>DbChronicle.Executor.EfCore</PackageId>
+    <Version>1.0.0</Version>
+    <Description>DbChronicle 的 EF Core 执行器：复用宿主 DbContext 的连接与事务执行迁移 SQL</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\DbChronicle\DbChronicle.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- 只依赖 EF Core 抽象与关系型基座；具体数据库 provider 由宿主提供 -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="6.0.0" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="6.0.0" />
+  </ItemGroup>
+
+</Project>

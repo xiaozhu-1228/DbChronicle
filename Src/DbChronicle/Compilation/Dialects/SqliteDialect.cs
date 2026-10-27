@@ -1,7 +1,11 @@
-using System;
 using System.Collections.Generic;
 using System.Text;
-using DbChronicle.Domain.Operations;
+using System;
+
+using DbChronicle.Common.Enums;
+using DbChronicle.Models.Operations;
+using DbChronicle.Models;
+
 namespace DbChronicle.Compilation.Dialects
 {
     public sealed class SqliteDialect : SqlDialectBase
@@ -28,7 +32,7 @@ namespace DbChronicle.Compilation.Dialects
         public override string CreateTable(CreateTableOperation operation)
         {
             List<string> list = new List<string>();
-            string text = FindAutoIncrementColumn(operation.Columns, operation.Table);
+            string text = FindAutoIncrementColumn(operation.Columns, operation.PrimaryKeyColumns, operation.Table);
             foreach (ColumnDefinition column in operation.Columns)
             {
                 list.Add("  " + BuildColumnDefinition(column, operation.Table, text));
@@ -44,6 +48,10 @@ namespace DbChronicle.Compilation.Dialects
             if (list2.Count > 0)
             {
                 list.Add("  PRIMARY KEY (" + JoinQuoted(list2) + ")");
+            }
+            foreach (ForeignKeyOperation foreignKey in operation.ForeignKeys)
+            {
+                list.Add("  " + BuildTableForeignKey(foreignKey));
             }
             StringBuilder stringBuilder = new StringBuilder();
             stringBuilder.Append("CREATE TABLE IF NOT EXISTS ").Append(Quote(operation.Table)).Append(" (\n");
@@ -70,6 +78,23 @@ namespace DbChronicle.Compilation.Dialects
         {
             Warn("W006", operation.Table, null, "SQLite 不支持表注释，已跳过");
             return "";
+        }
+
+        public override string View(ViewOperation operation)
+        {
+            if (operation.Action == ObjectAction.Drop)
+            {
+                return "DROP VIEW IF EXISTS " + Quote(operation.Name) + ";";
+            }
+
+            string columns = string.IsNullOrEmpty(operation.Columns) ? "" : " (" + operation.Columns + ")";
+            string create = "CREATE VIEW " + Quote(operation.Name) + columns + " AS\n" + operation.Select + ";";
+            if (operation.Action == ObjectAction.Replace || operation.Action == ObjectAction.Modify)
+            {
+                // SQLite 不支持 CREATE OR REPLACE VIEW，只能先删后建
+                return "DROP VIEW IF EXISTS " + Quote(operation.Name) + ";\n" + create;
+            }
+            return create;
         }
 
         public override string AddColumn(ColumnOperation operation)
@@ -119,7 +144,8 @@ namespace DbChronicle.Compilation.Dialects
 
         public override string ReorderColumn(ColumnOperation operation)
         {
-            Warn("W010", operation.Table, operation.Name, "SQLite 不支持列顺序调整，已忽略");
+            Error("E044", operation.Table, operation.Name,
+                "SQLite 不支持调整列顺序。请删除该 REORDER 操作，或改用 <rawSql> 重建表");
             return "";
         }
 
@@ -168,12 +194,17 @@ namespace DbChronicle.Compilation.Dialects
 
         public override string RenameIndex(IndexOperation operation)
         {
-            Warn("W022", operation.Table, null, "SQLite 不支持重命名索引，请改用 DROP + CREATE");
+            Warn("W028", operation.Table, null, "SQLite 不支持重命名索引，请改用 DROP + CREATE");
             return "";
         }
 
         public override string AddForeignKey(ForeignKeyOperation operation)
         {
+            if (operation.PartOfCreateTable)
+            {
+                // 已随 CREATE TABLE 内联，无需 rebuild
+                return "";
+            }
             Warn("W026", operation.Table, null, "SQLite 的外键只能在建表时声明，应走 rebuild");
             return "";
         }
@@ -221,11 +252,41 @@ namespace DbChronicle.Compilation.Dialects
 
         public override string RawSql(RawSqlOperation operation)
         {
-            if (operation.SqlByDialect.TryGetValue("sqlite", out var value) || operation.SqlByDialect.TryGetValue("any", out value))
+            return ResolveDialectSql(operation.SqlByDialect, operation.Table, "W032");
+        }
+
+        /// <summary>
+        /// SQLite：IGNORE → INSERT OR IGNORE；UPDATE → ON CONFLICT (主键) DO UPDATE（3.24+）。
+        /// 版本低于 3.24 或拿不到主键时降级为普通 INSERT 并警告。
+        /// </summary>
+        public override string BuildSeed(SeedOperation operation, IReadOnlyList<string> primaryKeyColumns)
+        {
+            string text = BuildSeedInsert(operation);
+            if (string.IsNullOrEmpty(text))
             {
-                return value;
+                return "";
             }
-            return "";
+            if (string.Equals(operation.Conflict, "IGNORE", StringComparison.OrdinalIgnoreCase))
+            {
+                return BuildSeedInsert(operation, "INSERT OR IGNORE INTO") + ";";
+            }
+            if (string.Equals(operation.Conflict, "UPDATE", StringComparison.OrdinalIgnoreCase))
+            {
+                if (!VersionAtLeast(3, 24) || primaryKeyColumns == null || primaryKeyColumns.Count == 0)
+                {
+                    Warn("W029", operation.Table, null,
+                        "sqlite 的 SEED conflict=UPDATE 需要 3.24+ 与主键冲突目标，当前条件不满足，已按普通 INSERT 生成");
+                    return text + ";";
+                }
+                List<string> list = new List<string>();
+                foreach (string column in operation.Columns)
+                {
+                    list.Add(Quote(column) + " = EXCLUDED." + Quote(column));
+                }
+                return text + "\nON CONFLICT (" + JoinQuoted(primaryKeyColumns) + ") DO UPDATE SET "
+                    + string.Join(", ", list) + ";";
+            }
+            return text + ";";
         }
 
         public override bool RequiresRebuild(SchemaOperation operation)
@@ -245,7 +306,17 @@ namespace DbChronicle.Compilation.Dialects
             {
                 return true;
             }
-            return operation is ForeignKeyOperation;
+            if (operation is ForeignKeyOperation foreignKeyOperation)
+            {
+                // 建表单元内的外键已随 CREATE TABLE 内联，不需要 rebuild
+                return !foreignKeyOperation.PartOfCreateTable;
+            }
+            if (operation is CheckConstraintOperation || operation is DefaultConstraintOperation)
+            {
+                // 检查约束与默认值约束在 SQLite 上只能通过重建表实现
+                return true;
+            }
+            return false;
         }
 
         public override string RebuildTable(RebuildTableOperation operation)
@@ -253,7 +324,7 @@ namespace DbChronicle.Compilation.Dialects
             string identifier = operation.Table + "__rebuild";
             List<string> list = new List<string>();
             List<string> list2 = new List<string>();
-            string text = FindAutoIncrementColumn(operation.Columns, operation.Table);
+            string text = FindAutoIncrementColumn(operation.Columns, operation.PrimaryKeyColumns, operation.Table);
             foreach (ColumnDefinition column in operation.Columns)
             {
                 list2.Add("  " + BuildColumnDefinition(column, operation.Table, text));
@@ -270,6 +341,14 @@ namespace DbChronicle.Compilation.Dialects
             {
                 list2.Add("  PRIMARY KEY (" + JoinQuoted(list3) + ")");
             }
+            foreach (CheckConstraintOperation check in operation.CheckConstraints)
+            {
+                list2.Add("  CONSTRAINT " + Quote(check.Name) + " CHECK (" + check.Expression + ")");
+            }
+            foreach (ForeignKeyOperation foreignKey in operation.ForeignKeys)
+            {
+                list2.Add("  " + BuildTableForeignKey(foreignKey));
+            }
             list.Add("DROP TABLE IF EXISTS " + Quote(identifier) + ";");
             list.Add("CREATE TABLE " + Quote(identifier) + " (\n" + string.Join(",\n", list2) + "\n);");
             if (operation.ColumnMappings.Count > 0)
@@ -279,13 +358,94 @@ namespace DbChronicle.Compilation.Dialects
                 foreach (KeyValuePair<string, string> columnMapping in operation.ColumnMappings)
                 {
                     list4.Add(Quote(columnMapping.Value));
-                    list5.Add(Quote(columnMapping.Key));
+                    list5.Add(BuildSelectExpression(operation, columnMapping.Value, columnMapping.Key));
                 }
                 list.Add("INSERT INTO " + Quote(identifier) + " (" + string.Join(", ", list4) + ") SELECT " + string.Join(", ", list5) + " FROM " + Quote(operation.Table) + ";");
             }
             list.Add("DROP TABLE " + Quote(operation.Table) + ";");
             list.Add("ALTER TABLE " + Quote(identifier) + " RENAME TO " + Quote(operation.Table) + ";");
             return BuildTimeFormatHints(operation.Columns) + string.Join("\n", list);
+        }
+
+        private string BuildTableForeignKey(ForeignKeyOperation operation)
+        {
+            var stringBuilder = new StringBuilder();
+            if (!string.IsNullOrEmpty(operation.Name))
+            {
+                stringBuilder.Append("CONSTRAINT ").Append(Quote(operation.Name)).Append(' ');
+            }
+            stringBuilder.Append("FOREIGN KEY (").Append(JoinQuoted(operation.Columns)).Append(") ")
+                .Append("REFERENCES ").Append(Quote(operation.RefTable)).Append(" (")
+                .Append(JoinQuoted(operation.RefColumns)).Append(')');
+            if (!string.IsNullOrEmpty(operation.OnDelete))
+            {
+                stringBuilder.Append(" ON DELETE ").Append(operation.OnDelete);
+            }
+            if (!string.IsNullOrEmpty(operation.OnUpdate))
+            {
+                stringBuilder.Append(" ON UPDATE ").Append(operation.OnUpdate);
+            }
+            return stringBuilder.ToString();
+        }
+
+        private string BuildSelectExpression(RebuildTableOperation operation, string targetColumn, string sourceColumn)
+        {
+            string expression = Quote(sourceColumn);
+            LogicalType sourceType;
+            ColumnDefinition target;
+            if (!operation.ColumnSourceTypes.TryGetValue(targetColumn, out sourceType)
+                || !TryFindColumn(operation.Columns, targetColumn, out target)
+                || !target.Type.HasValue)
+            {
+                return expression;
+            }
+
+            string sourceClass = StorageClassOf(sourceType);
+            string targetClass = StorageClassOf(target.Type.Value);
+            if (string.Equals(sourceClass, targetClass, StringComparison.OrdinalIgnoreCase))
+            {
+                return expression;
+            }
+
+            return "CAST(" + expression + " AS " + targetClass + ")";
+        }
+
+        private static string StorageClassOf(LogicalType type)
+        {
+            switch (type)
+            {
+                case LogicalType.Boolean:
+                case LogicalType.Int8:
+                case LogicalType.Int16:
+                case LogicalType.Int32:
+                case LogicalType.Int64:
+                    return "INTEGER";
+                case LogicalType.Float32:
+                case LogicalType.Float64:
+                    return "REAL";
+                case LogicalType.Decimal:
+                    return "NUMERIC";
+                case LogicalType.Binary:
+                case LogicalType.Blob:
+                    return "BLOB";
+                default:
+                    return "TEXT";
+            }
+        }
+
+        private static bool TryFindColumn(IEnumerable<ColumnDefinition> columns, string name, out ColumnDefinition column)
+        {
+            foreach (ColumnDefinition item in columns)
+            {
+                if (string.Equals(item.Name, name, StringComparison.OrdinalIgnoreCase))
+                {
+                    column = item;
+                    return true;
+                }
+            }
+
+            column = null;
+            return false;
         }
 
         private string BuildColumnDefinition(ColumnDefinition column, string table, string autoIncrementColumn)
@@ -347,7 +507,7 @@ namespace DbChronicle.Compilation.Dialects
             return stringBuilder.ToString();
         }
 
-        private string FindAutoIncrementColumn(IEnumerable<ColumnDefinition> columns, string table)
+        private string FindAutoIncrementColumn(IEnumerable<ColumnDefinition> columns, IEnumerable<string> primaryKeyColumns, string table)
         {
             foreach (ColumnDefinition column in columns)
             {
@@ -358,6 +518,14 @@ namespace DbChronicle.Compilation.Dialects
                 if (column.Type.GetValueOrDefault() != LogicalType.Int64 || !column.PrimaryKey.GetValueOrDefault())
                 {
                     throw new InvalidOperationException("SQLite 自增列必须同时满足：类型为 Int64 且 primaryKey=true（表 " + table + "，列 " + column.Name + "）");
+                }
+                foreach (string primaryKeyColumn in primaryKeyColumns)
+                {
+                    if (!string.Equals(primaryKeyColumn, column.Name, StringComparison.OrdinalIgnoreCase))
+                    {
+                        throw new InvalidOperationException("SQLite 的自增列必须单独作为主键，不能与其他列组成复合主键（表 "
+                            + table + "，自增列 " + column.Name + "，另一主键列 " + primaryKeyColumn + "）");
+                    }
                 }
                 return column.Name;
             }
@@ -384,5 +552,3 @@ namespace DbChronicle.Compilation.Dialects
         }
     }
 }
-
-

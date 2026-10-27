@@ -1,7 +1,11 @@
-using System;
 using System.Collections.Generic;
 using System.Text;
-using DbChronicle.Domain.Operations;
+using System;
+
+using DbChronicle.Common.Enums;
+using DbChronicle.Models.Operations;
+using DbChronicle.Models;
+
 namespace DbChronicle.Compilation.Dialects
 {
     public class MySqlDialect : SqlDialectBase
@@ -22,12 +26,12 @@ namespace DbChronicle.Compilation.Dialects
 
         public override string Quote(string identifier)
         {
-            return "`" + identifier + "`";
+            return "`" + (identifier ?? "").Replace("`", "``") + "`";
         }
 
         public override string EscapeString(string value)
         {
-            return (value ?? "").Replace("\\", "\\\\").Replace("'", "''");
+            return (value ?? "").Replace("\\", "\\\\").Replace("\0", "\\0").Replace("'", "''");
         }
 
         public override string CreateTable(CreateTableOperation operation)
@@ -66,6 +70,32 @@ namespace DbChronicle.Compilation.Dialects
         public override string CommentTable(CommentTableOperation operation)
         {
             return "ALTER TABLE " + Quote(operation.Table) + " COMMENT='" + EscapeString(operation.Comment) + "';";
+        }
+
+        public override string TableOption(TableOptionOperation operation)
+        {
+            System.Collections.Generic.List<string> list = new System.Collections.Generic.List<string>();
+            if (!string.IsNullOrEmpty(operation.Engine))
+            {
+                list.Add("ENGINE=" + operation.Engine);
+            }
+            if (!string.IsNullOrEmpty(operation.Charset))
+            {
+                list.Add("DEFAULT CHARSET=" + operation.Charset);
+            }
+            if (!string.IsNullOrEmpty(operation.Collate))
+            {
+                list.Add("COLLATE=" + operation.Collate);
+            }
+            if (!string.IsNullOrEmpty(operation.Tablespace))
+            {
+                list.Add("TABLESPACE " + Quote(operation.Tablespace));
+            }
+            if (list.Count == 0)
+            {
+                return "";
+            }
+            return "ALTER TABLE " + Quote(operation.Table) + " " + string.Join(" ", list) + ";";
         }
 
         public override string AddColumn(ColumnOperation operation)
@@ -153,7 +183,7 @@ namespace DbChronicle.Compilation.Dialects
         {
             if (!string.IsNullOrEmpty(operation.Where))
             {
-                Warn("W021", operation.Table, null, "MySQL 不支持部分索引，where 被忽略");
+                Warn("W027", operation.Table, null, "MySQL 不支持部分索引，where 被忽略");
             }
             string value = (operation.Unique ? "UNIQUE " : "");
             if (!string.IsNullOrEmpty(operation.Type))
@@ -194,7 +224,7 @@ namespace DbChronicle.Compilation.Dialects
         {
             if (!VersionAtLeast(5, 7))
             {
-                Warn("W022", operation.Table, null, "MySQL 5.7 以下不支持 RENAME INDEX，请改用 DROP + CREATE");
+                Warn("W028", operation.Table, null, "MySQL 5.7 以下不支持 RENAME INDEX，请改用 DROP + CREATE");
                 return "";
             }
             return "ALTER TABLE " + Quote(operation.Table) + " RENAME INDEX " + Quote(operation.Name) + " TO " + Quote(operation.NewName) + ";";
@@ -276,11 +306,33 @@ namespace DbChronicle.Compilation.Dialects
 
         public override string RawSql(RawSqlOperation operation)
         {
-            if (operation.SqlByDialect.TryGetValue(base.Name, out var value) || operation.SqlByDialect.TryGetValue("any", out value))
+            return ResolveDialectSql(operation.SqlByDialect, operation.Table, "W032");
+        }
+
+        /// <summary>
+        /// MySQL / MariaDB：IGNORE → INSERT IGNORE；UPDATE → ON DUPLICATE KEY UPDATE（无需冲突目标）。
+        /// </summary>
+        public override string BuildSeed(SeedOperation operation, IReadOnlyList<string> primaryKeyColumns)
+        {
+            string text = BuildSeedInsert(operation);
+            if (string.IsNullOrEmpty(text))
             {
-                return value;
+                return "";
             }
-            return "";
+            if (string.Equals(operation.Conflict, "IGNORE", StringComparison.OrdinalIgnoreCase))
+            {
+                return BuildSeedInsert(operation, "INSERT IGNORE INTO") + ";";
+            }
+            if (string.Equals(operation.Conflict, "UPDATE", StringComparison.OrdinalIgnoreCase))
+            {
+                List<string> list = new List<string>();
+                foreach (string column in operation.Columns)
+                {
+                    list.Add(Quote(column) + " = VALUES(" + Quote(column) + ")");
+                }
+                return text + "\nON DUPLICATE KEY UPDATE " + string.Join(", ", list) + ";";
+            }
+            return text + ";";
         }
 
         protected string BuildColumnDefinition(ColumnDefinition column, string table, bool allowInlineForeignKey = true)
@@ -353,5 +405,3 @@ namespace DbChronicle.Compilation.Dialects
         }
     }
 }
-
-

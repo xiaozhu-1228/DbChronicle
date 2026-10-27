@@ -1,23 +1,22 @@
-using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
-using DbChronicle.Compilation.Checking;
-using DbChronicle.Abstractions.Diagnostics;
+using System;
+
+using DbChronicle.Common.Enums;
+using DbChronicle.Compilation.Checks;
 using DbChronicle.Compilation.Compiler;
-using DbChronicle.Domain.Structures;
-using DbChronicle.Configuration;
 using DbChronicle.Compilation.Dialects;
-using DbChronicle.Abstractions.Execution;
-using DbChronicle.Runtime.Execution;
-using DbChronicle.Domain.Model;
-using DbChronicle.Runtime.Naming;
-using DbChronicle.Parsing;
-using DbChronicle.Runtime.Rollback;
-using DbChronicle.Abstractions.Versioning;
-using DbChronicle.Runtime.Versioning;
+using DbChronicle.Configuration;
 using DbChronicle.Executor.AdoNet;
+using DbChronicle.Migrations.Executor;
+using DbChronicle.Migrations.Rollback;
+using DbChronicle.Migrations.State;
+using DbChronicle.Migrations.Templates;
+using DbChronicle.Models;
+using DbChronicle.Parsing;
+using DbChronicle.Scanner;
 
 namespace DbChronicle.Cli
 {
@@ -84,10 +83,18 @@ namespace DbChronicle.Cli
         {
             var config = LoadConfig(args);
             var loader = new ChangeUnitLoader(config);
-            var units = loader.LoadAll();
-            if (units.Count == 0)
+            var allUnits = loader.LoadAll();
+            if (allUnits.Count == 0)
             {
                 throw new CliFailureException(ExitCodes.Usage, "未找到变更单元：" + loader.MigrationsDirectory);
+            }
+
+            // --pending / --change-id：只编译目标子集（增量基底仍用全量单元构建，否则 MODIFY 补全会缺上下文）
+            var units = SelectUnits(args, config, allUnits);
+            if (units.Count == 0)
+            {
+                // 已全部应用：不生成任何文件（提示已在 SelectUnits 打印）
+                return ExitCodes.Success;
             }
 
             var allDialects = args.Has("all-dialects");
@@ -107,9 +114,22 @@ namespace DbChronicle.Cli
                 ? DialectFactory.SupportedDialects
                 : new[] { config.Database.Dialect };
 
-            var outputDirectory = config.ResolveOutputPath();
+            var outputDirectory = args.Get("out", config.ResolveOutputPath());
             Directory.CreateDirectory(outputDirectory);
             var hasError = false;
+
+            // --split：每个（变更单元 × 方言）输出一个文件，每行一条完整语句，便于外部程序（C++ / Java 等）逐行读取执行
+            var split = args.Has("split");
+            if (split)
+            {
+                // 清单文件：外部程序按此顺序逐个执行 + 标记已应用，无需自己枚举目录
+                var manifest = new StringBuilder();
+                foreach (var unit in units)
+                {
+                    manifest.AppendLine(unit.Id + "\t" + unit.Release);
+                }
+                File.WriteAllText(Path.Combine(outputDirectory, "_units.txt"), manifest.ToString(), new UTF8Encoding(false));
+            }
 
             foreach (var dialectName in dialects)
             {
@@ -122,7 +142,8 @@ namespace DbChronicle.Cli
 
                 foreach (var unit in units)
                 {
-                    var model = options.IncrementalModify ? new StructureModelBuilder().Build(units, unit.Id) : null;
+                    // 增量模式必须用全量单元建基底（--pending 过滤掉的已应用单元同样参与推导）
+                    var model = options.IncrementalModify ? new StructureModelBuilder().Build(allUnits, unit.Id) : null;
                     var result = new SchemaCompiler(dialect, options, model).Compile(unit);
 
                     PrintDiagnostics(result.Diagnostics);
@@ -133,7 +154,25 @@ namespace DbChronicle.Cli
                         continue;
                     }
 
-                    builder.AppendLine(result.Sql);
+                    if (split)
+                    {
+                        var unitPath = Path.Combine(outputDirectory, unit.Id + "." + dialectName + ".sql");
+                        WriteStatementLines(unitPath, result.Statements);
+                        Console.WriteLine("已生成：" + unitPath);
+                    }
+                    else
+                    {
+                        builder.AppendLine(result.Sql);
+                    }
+                }
+
+                if (split)
+                {
+                    if (dialectFailed)
+                    {
+                        Console.Error.WriteLine("方言 " + dialectName + " 编译失败，已跳过合并输出");
+                    }
+                    continue;
                 }
 
                 var outputPath = Path.Combine(outputDirectory, dialectName + ".sql");
@@ -144,15 +183,129 @@ namespace DbChronicle.Cli
             return hasError ? ExitCodes.Execution : ExitCodes.Success;
         }
 
+        /// <summary>
+        /// 选择要编译的单元：--change-id 指定单个；--pending 过滤掉状态文件里已应用的；
+        /// 都未指定时保持原行为（全量）。
+        /// </summary>
+        private static IReadOnlyList<ChangeUnit> SelectUnits(CliArguments args, DbChronicleConfig config, IReadOnlyList<ChangeUnit> allUnits)
+        {
+            var changeId = args.Get("change-id", null);
+            if (!string.IsNullOrEmpty(changeId))
+            {
+                var selected = allUnits
+                    .Where(x => string.Equals(x.Id, changeId, StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+                if (selected.Count == 0)
+                {
+                    throw new CliFailureException(ExitCodes.Usage, "未找到变更单元：" + changeId);
+                }
+                return selected;
+            }
+
+            if (!args.Has("pending"))
+            {
+                return allUnits;
+            }
+
+            var applied = new HashSet<string>(
+                new VersionStore(config).LoadAll()
+                    .Where(x => !x.HasFailure)
+                    .Select(x => x.ChangeId),
+                StringComparer.OrdinalIgnoreCase);
+
+            var pending = allUnits.Where(x => !applied.Contains(x.Id)).ToList();
+            if (pending.Count == 0)
+            {
+                Console.WriteLine("没有待应用的变更单元（状态文件已是最新）");
+                return pending;
+            }
+
+            Console.WriteLine("待应用 " + pending.Count + " 个变更单元：" + string.Join(", ", pending.Select(x => x.Id)));
+            return pending;
+        }
+
+        /// <summary>
+        /// 写成"一行一条语句"：去掉整行注释（压平后会吞掉后续内容）、合并空白、去掉末尾分号。
+        /// 外部程序按行读取即可直接执行，无需自己解析 SQL 分隔符。
+        /// </summary>
+        private static void WriteStatementLines(string path, IEnumerable<SqlStatement> statements)
+        {
+            var builder = new StringBuilder();
+            foreach (var statement in statements)
+            {
+                var line = FlattenStatement(statement.Text);
+                if (line.Length > 0)
+                {
+                    builder.AppendLine(line);
+                }
+            }
+            File.WriteAllText(path, builder.ToString(), new UTF8Encoding(false));
+        }
+
+        private static string FlattenStatement(string text)
+        {
+            if (string.IsNullOrEmpty(text))
+            {
+                return "";
+            }
+
+            var builder = new StringBuilder();
+            foreach (var rawLine in text.Replace("\r\n", "\n").Split('\n'))
+            {
+                var line = rawLine.Trim();
+                if (line.Length == 0 || line.StartsWith("--", StringComparison.Ordinal))
+                {
+                    continue;
+                }
+                if (builder.Length > 0)
+                {
+                    builder.Append(' ');
+                }
+                builder.Append(line);
+            }
+
+            var flattened = builder.ToString().Trim();
+            return flattened.EndsWith(";", StringComparison.Ordinal)
+                ? flattened.Substring(0, flattened.Length - 1).TrimEnd()
+                : flattened;
+        }
+
         public static int Check(CliArguments args)
         {
             var config = LoadConfig(args);
             var units = new ChangeUnitLoader(config).LoadAll();
             var diagnostics = new List<CompileDiagnostic>();
+            var compilerOptions = new CompilerOptions
+            {
+                IncrementalModify = config.Options.IncrementalModify,
+                IncludeComments = config.Options.IncludeComments,
+                StatementDelimiter = config.Options.StatementDelimiter
+            };
+
+            var dialect = DialectFactory.Create(config.Database.Dialect, config.Database.Version,
+                new DialectContext { IncrementalModify = compilerOptions.IncrementalModify });
+
             foreach (var unit in units)
             {
-                diagnostics.AddRange(unit.Diagnostics);
+                try
+                {
+                    var model = compilerOptions.IncrementalModify
+                        ? new StructureModelBuilder().Build(units, unit.Id)
+                        : null;
+                    diagnostics.AddRange(new SchemaCompiler(dialect, compilerOptions, model).Compile(unit).Diagnostics);
+                }
+                catch (Exception ex)
+                {
+                    diagnostics.Add(new CompileDiagnostic
+                    {
+                        Code = "E043",
+                        Severity = DiagnosticSeverity.Error,
+                        ChangeId = unit.Id,
+                        Message = "编译异常：" + ex.Message
+                    });
+                }
             }
+
             diagnostics.AddRange(new ChangeChecker().Check(units));
 
             PrintDiagnostics(diagnostics);
@@ -175,7 +328,7 @@ namespace DbChronicle.Cli
         {
             var config = LoadConfig(args);
             var units = new ChangeUnitLoader(config).LoadAll();
-            var connectionString = ConnectionResolver.Resolve(config);
+            var connectionString = ResolveConnection(config);
             var options = new ApplyOptions
             {
                 ConnectionString = connectionString,
@@ -183,6 +336,7 @@ namespace DbChronicle.Cli
                 DryRun = args.Has("dry-run"),
                 MarkAppliedChangeId = args.Get("mark-applied", null),
                 Restart = args.Has("restart"),
+                ContinueOnError = args.Has("continue-on-error") ? true : (bool?)null,
                 LockTimeoutSeconds = config.Options.LockTimeoutSeconds,
                 Log = Console.WriteLine
             };
@@ -280,9 +434,8 @@ namespace DbChronicle.Cli
         public static int Status(CliArguments args)
         {
             var config = LoadConfig(args);
-            var connectionString = ConnectionResolver.Resolve(config);
             var units = new ChangeUnitLoader(config).LoadAll();
-            var applied = LoadApplied(config, connectionString);
+            var applied = LoadApplied(config);
 
             var releaseFilter = args.Get("release", null);
             var current = applied
@@ -342,9 +495,8 @@ namespace DbChronicle.Cli
         public static int Verify(CliArguments args)
         {
             var config = LoadConfig(args);
-            var connectionString = ConnectionResolver.Resolve(config);
             var units = new ChangeUnitLoader(config).LoadAll();
-            var applied = LoadApplied(config, connectionString);
+            var applied = LoadApplied(config);
 
             var map = new Dictionary<string, ChangeUnit>(StringComparer.OrdinalIgnoreCase);
             foreach (var unit in units)
@@ -394,23 +546,51 @@ namespace DbChronicle.Cli
         public static int Scan(CliArguments args)
         {
             var assemblyPath = args.Get("assembly", null);
-            if (string.IsNullOrEmpty(assemblyPath))
+            var sourcePath = args.Get("source", null);
+            if (string.IsNullOrEmpty(assemblyPath) && string.IsNullOrEmpty(sourcePath))
             {
-                throw new CliFailureException(ExitCodes.Usage, "缺少 --assembly 参数");
-            }
-
-            if (!File.Exists(assemblyPath))
-            {
-                throw new CliFailureException(ExitCodes.Usage, "程序集不存在：" + assemblyPath);
+                throw new CliFailureException(ExitCodes.Usage, "缺少 --assembly 或 --source 参数");
             }
 
             var output = args.Get("out", Path.Combine("migrations", "00000000_000000_baseline.xml"));
-            var scanner = new DbChronicle.Scanning.CSharpScanner();
 
-            DbChronicle.Scanning.ScanResult result;
+            ScanResult result;
+            string sourceLabel;
             try
             {
-                result = scanner.ScanAssembly(Path.GetFullPath(assemblyPath));
+                if (!string.IsNullOrEmpty(assemblyPath))
+                {
+                    if (!File.Exists(assemblyPath))
+                    {
+                        throw new CliFailureException(ExitCodes.Usage, "程序集不存在：" + assemblyPath);
+                    }
+                    result = new DbChronicle.Scanner.CSharpScanner().ScanAssembly(Path.GetFullPath(assemblyPath));
+                    sourceLabel = "C# 实体（程序集反射）";
+                }
+                else
+                {
+                    var fullSource = Path.GetFullPath(sourcePath);
+                    if (!Directory.Exists(fullSource))
+                    {
+                        throw new CliFailureException(ExitCodes.Usage, "源码目录不存在：" + sourcePath);
+                    }
+
+                    var language = (args.Get("lang", "csharp") ?? "csharp").Trim().ToLowerInvariant();
+                    if (language == "csharp" || language == "c#")
+                    {
+                        result = new DbChronicle.Scanner.Source.SourceScanner().ScanDirectory(fullSource);
+                        sourceLabel = "C# 源码（Roslyn）";
+                    }
+                    else
+                    {
+                        result = new DbChronicle.Scanner.Languages.LanguageSourceScanner().ScanDirectory(fullSource, language);
+                        sourceLabel = language + " 源码";
+                    }
+                }
+            }
+            catch (CliFailureException)
+            {
+                throw;
             }
             catch (Exception ex)
             {
@@ -419,11 +599,12 @@ namespace DbChronicle.Cli
 
             if (result.Tables.Count == 0)
             {
-                Console.Error.WriteLine("未识别到实体：需要 [Table] / [Entity] 特性，或继承名字含 Entity 的基类");
+                Console.Error.WriteLine("未识别到实体：需要 [Table] / [Entity] 特性，或类名以 Entity 结尾");
                 return ExitCodes.Usage;
             }
 
-            var xml = scanner.GenerateXml(result, ChangeUnitFactory.ResolveAuthor(), DateTime.Now.ToString("yyyy-MM-dd"));
+            var xml = new BaselineXmlWriter().Generate(result, ChangeUnitFactory.ResolveAuthor(),
+                DateTime.Now.ToString("yyyy-MM-dd"), sourceLabel);
             var outputPath = Path.GetFullPath(output);
             var directory = Path.GetDirectoryName(outputPath);
             if (!string.IsNullOrEmpty(directory))
@@ -440,6 +621,132 @@ namespace DbChronicle.Cli
             Console.WriteLine("已生成基线草案：" + outputPath + "（" + result.Tables.Count + " 张表）");
             Console.WriteLine("提示：草案需人工确认后冻结，之后只写增量变更单元。");
             return ExitCodes.Success;
+        }
+
+        /// <summary>代码生成：把 migrations 累积出的结构模型写成各语言实体。</summary>
+        public static int GenerateCode(CliArguments args)
+        {
+            var config = LoadConfig(args);
+            var language = args.Get("lang", "csharp");
+            var output = args.Get("out", "Entities");
+            var ns = args.Get("namespace", "Entities");
+
+            var units = new ChangeUnitLoader(config).LoadAll();
+            var model = new StructureModelBuilder().Build(units, null);
+            if (model.Tables.Count == 0)
+            {
+                Console.Error.WriteLine("没有可生成的表：请先准备 migrations/（基线 + 增量）");
+                return ExitCodes.Usage;
+            }
+
+            var options = new DbChronicle.CodeGen.EntityCodeOptions
+            {
+                Language = language,
+                Namespace = ns,
+                IncludeComments = !args.Has("no-comments"),
+                IncludeColumnMapping = !args.Has("no-column-mapping")
+            };
+
+            int count;
+            try
+            {
+                var generator = new DbChronicle.CodeGen.EntityCodeGenerator();
+                count = generator.GenerateToDirectory(model, options, Path.GetFullPath(output));
+            }
+            catch (NotSupportedException ex)
+            {
+                throw new CliFailureException(ExitCodes.Usage, ex.Message);
+            }
+
+            Console.WriteLine("已生成 " + count + " 个实体文件到 " + output
+                + "（语言 " + language + "，命名空间 " + ns + "，表 " + model.Tables.Count + " 张）");
+            return ExitCodes.Success;
+        }
+
+        /// <summary>数据库反向扫描：读取现有库结构，生成基线草案（只读，不修改目标库）。</summary>
+        public static int ScanDatabase(CliArguments args)
+        {
+            var config = LoadConfig(args);
+            var output = args.Get("out", Path.Combine("migrations", "00000000_000000_baseline.xml"));
+            var connection = ConnectionResolver.Resolve(config);
+
+            var options = new ScanDatabaseOptions();
+            AddList(options.Tables, args.Get("tables", null));
+            AddList(options.ExcludeTables, args.Get("exclude", null));
+            options.IncludeIndexes = !args.Has("no-indexes");
+            options.IncludeForeignKeys = !args.Has("no-foreign-keys");
+            options.IncludeCheckConstraints = !args.Has("no-check-constraints");
+            options.IncludeComments = !args.Has("no-comments");
+
+            ScanResult result;
+            try
+            {
+                var factory = new AdoNetExecutorFactory(config.Database.Dialect);
+                using (var executor = factory.Create(connection))
+                {
+                    var scanner = new DbChronicle.Scanner.Database.DatabaseScanner(executor);
+                    result = scanner.Scan(options);
+                    if (result.Tables.Count == 0)
+                    {
+                        Console.Error.WriteLine("未扫描到任何表（检查 --tables / --exclude 与库中是否有业务表）");
+                        return ExitCodes.Usage;
+                    }
+
+                    var xml = scanner.GenerateXml(result, ChangeUnitFactory.ResolveAuthor(),
+                        DateTime.Now.ToString("yyyy-MM-dd"));
+                    var outputPath = Path.GetFullPath(output);
+                    var directory = Path.GetDirectoryName(outputPath);
+                    if (!string.IsNullOrEmpty(directory))
+                    {
+                        Directory.CreateDirectory(directory);
+                    }
+                    File.WriteAllText(outputPath, xml, new UTF8Encoding(false));
+
+                    foreach (var warning in result.Warnings)
+                    {
+                        Console.WriteLine("warning: " + warning);
+                    }
+
+                    var columnCount = 0;
+                    var foreignKeyCount = 0;
+                    foreach (var table in result.Tables)
+                    {
+                        columnCount += table.Columns.Count;
+                        foreignKeyCount += table.ForeignKeys.Count;
+                    }
+
+                    Console.WriteLine("已生成基线草案：" + outputPath);
+                    Console.WriteLine("  表 " + result.Tables.Count + " 张，列 " + columnCount
+                        + " 个，外键 " + foreignKeyCount + " 个（方言 " + config.Database.Dialect + "）");
+                    Console.WriteLine("提示：草案需人工确认后冻结，之后只写增量变更单元。");
+                }
+            }
+            catch (CliFailureException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                throw new CliFailureException(ExitCodes.Environment, "反向扫描失败：" + ex.Message);
+            }
+
+            return ExitCodes.Success;
+        }
+
+        private static void AddList(System.Collections.Generic.List<string> target, string csv)
+        {
+            if (string.IsNullOrEmpty(csv))
+            {
+                return;
+            }
+            foreach (var part in csv.Split(','))
+            {
+                var trimmed = part.Trim();
+                if (trimmed.Length > 0)
+                {
+                    target.Add(trimmed);
+                }
+            }
         }
 
         public static int Rollback(CliArguments args)
@@ -500,7 +807,7 @@ namespace DbChronicle.Cli
                 return ExitCodes.Success;
             }
 
-            var connectionString = ConnectionResolver.Resolve(config);
+            var connectionString = ResolveConnection(config);
             RollbackResult result;
             try
             {
@@ -542,41 +849,49 @@ namespace DbChronicle.Cli
             }
         }
 
-        private static List<AppliedChange> LoadApplied(DbChronicleConfig config, string connectionString)
+        private static List<AppliedChange> LoadApplied(DbChronicleConfig config)
         {
-            IDbExecutorFactory factory;
             try
             {
-                factory = AdoNetExecutorFactory.Resolve(config.Database.Dialect);
-            }
-            catch (NotSupportedException ex)
-            {
-                throw new CliFailureException(ExitCodes.Usage, ex.Message);
-            }
-
-            try
-            {
-                using (var executor = factory.Create(connectionString))
-                {
-                    var store = new VersionStore(config);
-                    return store.LoadAll();
-                }
+                return new VersionStore(config).LoadAll();
             }
             catch (Exception ex)
             {
-                throw new CliFailureException(ExitCodes.Environment, "读取版本表失败：" + ex.Message);
+                throw new CliFailureException(ExitCodes.Execution, "读取状态文件失败：" + ex.Message);
+            }
+        }
+
+        private static string ResolveConnection(DbChronicleConfig config)
+        {
+            try
+            {
+                return ConnectionResolver.Resolve(config);
+            }
+            catch (InvalidOperationException ex)
+            {
+                throw new CliFailureException(ExitCodes.Environment, ex.Message);
             }
         }
 
         private static DbChronicleConfig LoadConfig(CliArguments args)
         {
+            var explicitPath = args.Has("config");
             var path = args.Get("config", ConfigLoader.DefaultFileName);
-            if (!File.Exists(path))
+            if (File.Exists(path))
+            {
+                return ConfigLoader.Load(path);
+            }
+
+            if (explicitPath)
             {
                 throw new CliFailureException(ExitCodes.Usage,
                     "配置文件不存在：" + Path.GetFullPath(path) + "（先执行 db-chronicle init）");
             }
-            return ConfigLoader.Load(path);
+
+            var created = ConfigLoader.CreateDefault(path);
+            ConfigLoader.Save(created, path);
+            Console.WriteLine("未找到配置文件，已生成默认配置：" + created.ConfigPath + "（可用 db-chronicle init --dialect <name> 调整方言）");
+            return created;
         }
 
         private static void PrintDiagnostics(IEnumerable<CompileDiagnostic> diagnostics)

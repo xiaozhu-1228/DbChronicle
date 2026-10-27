@@ -1,12 +1,13 @@
-using System;
-using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System;
+
 using DbChronicle.Configuration;
-using DbChronicle.Abstractions.Execution;
-using DbChronicle.Runtime.Execution;
-using DbChronicle.Parsing;
+using DbChronicle.Execution;
 using DbChronicle.Executor.AdoNet;
+using DbChronicle.Migrations.Executor;
+using DbChronicle.Models;
+using DbChronicle.Parsing;
 using Xunit;
 
 namespace DbChronicle.IntegrationTests

@@ -1,7 +1,11 @@
-using System;
 using System.Collections.Generic;
 using System.Text;
-using DbChronicle.Domain.Operations;
+using System;
+
+using DbChronicle.Common.Enums;
+using DbChronicle.Models.Operations;
+using DbChronicle.Models;
+
 namespace DbChronicle.Compilation.Dialects
 {
     public sealed class PostgreSqlDialect : SqlDialectBase
@@ -17,7 +21,26 @@ namespace DbChronicle.Compilation.Dialects
 
         public override string Quote(string identifier)
         {
-            return "\"" + identifier + "\"";
+            return "\"" + (identifier ?? "").Replace("\"", "\"\"") + "\"";
+        }
+
+        /// <summary>PostgreSQL 的 boolean 字面量是 true/false，不能沿用基类的 1/0。</summary>
+        protected override string FormatDefaultValue(string value)
+        {
+            if (value != null)
+            {
+                var text = value.Trim();
+                if (string.Equals(text, "true", StringComparison.OrdinalIgnoreCase))
+                {
+                    return "true";
+                }
+                if (string.Equals(text, "false", StringComparison.OrdinalIgnoreCase))
+                {
+                    return "false";
+                }
+            }
+
+            return base.FormatDefaultValue(value);
         }
 
         public override string EscapeString(string value)
@@ -65,6 +88,73 @@ namespace DbChronicle.Compilation.Dialects
             return "COMMENT ON TABLE " + Quote(operation.Table) + " IS " + ((operation.Comment == null) ? "NULL" : ("'" + EscapeString(operation.Comment) + "'")) + ";";
         }
 
+        public override string CommentIndex(IndexOperation operation)
+        {
+            return "COMMENT ON INDEX " + Quote(operation.Name) + " IS " + ((operation.Comment == null) ? "NULL" : ("'" + EscapeString(operation.Comment) + "'")) + ";";
+        }
+
+        public override string Sequence(SequenceOperation operation)
+        {
+            if (operation.Action == ObjectAction.Drop)
+            {
+                return "DROP SEQUENCE IF EXISTS " + Quote(operation.Name) + ";";
+            }
+
+            StringBuilder stringBuilder = new StringBuilder();
+            if (operation.Action == ObjectAction.Replace || operation.Action == ObjectAction.Modify)
+            {
+                stringBuilder.Append("DROP SEQUENCE IF EXISTS ").Append(Quote(operation.Name)).AppendLine(";");
+            }
+            stringBuilder.Append("CREATE SEQUENCE ").Append(Quote(operation.Name));
+            if (operation.StartWith.HasValue)
+            {
+                stringBuilder.Append(" START WITH ").Append(operation.StartWith.Value);
+            }
+            if (operation.IncrementBy.HasValue)
+            {
+                stringBuilder.Append(" INCREMENT BY ").Append(operation.IncrementBy.Value);
+            }
+            if (operation.MinValue.HasValue)
+            {
+                stringBuilder.Append(" MINVALUE ").Append(operation.MinValue.Value);
+            }
+            if (operation.MaxValue.HasValue)
+            {
+                stringBuilder.Append(" MAXVALUE ").Append(operation.MaxValue.Value);
+            }
+            if (operation.Cycle.HasValue)
+            {
+                stringBuilder.Append(operation.Cycle.Value ? " CYCLE" : " NO CYCLE");
+            }
+            if (operation.Cache.HasValue)
+            {
+                stringBuilder.Append(" CACHE ").Append(operation.Cache.Value);
+            }
+            stringBuilder.Append(';');
+            return stringBuilder.ToString();
+        }
+
+        public override string TableOption(TableOptionOperation operation)
+        {
+            if (!string.IsNullOrEmpty(operation.Engine) || !string.IsNullOrEmpty(operation.Charset) || !string.IsNullOrEmpty(operation.Collate))
+            {
+                Error("E047", operation.Table, null,
+                    "PostgreSQL 的存储引擎与字符集由数据库/表空间决定，无法按表调整；仅支持 TABLESPACE（请改用 <rawSql>）");
+                return "";
+            }
+            if (string.IsNullOrEmpty(operation.Tablespace))
+            {
+                return "";
+            }
+            return "ALTER TABLE " + Quote(operation.Table) + " SET TABLESPACE " + Quote(operation.Tablespace) + ";";
+        }
+
+        public override string CommentConstraint(ConstraintCommentOperation operation)
+        {
+            return "COMMENT ON CONSTRAINT " + Quote(operation.Name) + " ON " + Quote(operation.Table)
+                + " IS " + ((operation.Comment == null) ? "NULL" : ("'" + EscapeString(operation.Comment) + "'")) + ";";
+        }
+
         public override string AddColumn(ColumnOperation operation)
         {
             StringBuilder stringBuilder = new StringBuilder();
@@ -86,24 +176,58 @@ namespace DbChronicle.Compilation.Dialects
                 Warn("W008", operation.Table, operation.Name, "缺少完整列定义，无法生成 ALTER COLUMN");
                 return "";
             }
+
             List<string> list = new List<string>();
-            string text = Quote(operation.Table);
-            string text2 = Quote(operation.Name);
-            list.Add("ALTER TABLE " + text + " ALTER COLUMN " + text2 + " TYPE " + ResolveType(definition, operation.Table) + ";");
-            if (definition.Nullable.HasValue)
+            string table = Quote(operation.Table);
+            string column = Quote(operation.Name);
+            ColumnDefinition previous = operation.PreviousDefinition;
+
+            if (previous == null || TypeChanged(definition, previous))
             {
-                list.Add("ALTER TABLE " + text + " ALTER COLUMN " + text2 + (definition.Nullable.Value ? " DROP NOT NULL;" : " SET NOT NULL;"));
+                list.Add("ALTER TABLE " + table + " ALTER COLUMN " + column + " TYPE " + ResolveType(definition, operation.Table) + ";");
             }
+
+            if (definition.Nullable.HasValue && (previous == null || definition.Nullable != previous.Nullable))
+            {
+                list.Add("ALTER TABLE " + table + " ALTER COLUMN " + column + (definition.Nullable.Value ? " DROP NOT NULL;" : " SET NOT NULL;"));
+            }
+
             DefaultValueSpec defaultValueSpec = definition.DefaultValue ?? DefaultValueSpec.Undeclared;
-            if (defaultValueSpec.IsDeclared)
+            if (defaultValueSpec.IsDeclared && (previous == null || !SameDefault(defaultValueSpec, previous.DefaultValue)))
             {
-                list.Add(defaultValueSpec.IsNone ? ("ALTER TABLE " + text + " ALTER COLUMN " + text2 + " DROP DEFAULT;") : ("ALTER TABLE " + text + " ALTER COLUMN " + text2 + " SET DEFAULT " + (defaultValueSpec.IsNullLiteral ? "NULL" : FormatDefaultValue(defaultValueSpec.RawValue)) + ";"));
+                list.Add(defaultValueSpec.IsNone
+                    ? ("ALTER TABLE " + table + " ALTER COLUMN " + column + " DROP DEFAULT;")
+                    : ("ALTER TABLE " + table + " ALTER COLUMN " + column + " SET DEFAULT " + (defaultValueSpec.IsNullLiteral ? "NULL" : FormatDefaultValue(defaultValueSpec.RawValue)) + ";"));
             }
-            if (definition.Comment != null)
+
+            if (definition.Comment != null && (previous == null || !string.Equals(definition.Comment, previous.Comment, StringComparison.Ordinal)))
             {
                 list.Add(BuildCommentColumn(operation.Table, operation.Name, definition.Comment));
             }
+
             return string.Join("\n", list);
+        }
+
+        private static bool TypeChanged(ColumnDefinition current, ColumnDefinition previous)
+        {
+            return current.Type != previous.Type
+                || current.Length != previous.Length
+                || current.Precision != previous.Precision
+                || current.Scale != previous.Scale
+                || current.Unsigned.GetValueOrDefault() != previous.Unsigned.GetValueOrDefault();
+        }
+
+        private static bool SameDefault(DefaultValueSpec current, DefaultValueSpec previous)
+        {
+            if (previous == null)
+            {
+                return false;
+            }
+            if (current.IsNone != previous.IsNone || current.IsNullLiteral != previous.IsNullLiteral)
+            {
+                return false;
+            }
+            return string.Equals(current.RawValue ?? "", previous.RawValue ?? "", StringComparison.Ordinal);
         }
 
         public override string DropColumn(ColumnOperation operation)
@@ -123,7 +247,8 @@ namespace DbChronicle.Compilation.Dialects
 
         public override string ReorderColumn(ColumnOperation operation)
         {
-            Warn("W010", operation.Table, operation.Name, "PostgreSQL 不支持列顺序调整，已忽略");
+            Error("E044", operation.Table, operation.Name,
+                "PostgreSQL 不支持调整列顺序。请删除该 REORDER 操作，或改用 <rawSql> 按方言重建表");
             return "";
         }
 
@@ -238,11 +363,41 @@ namespace DbChronicle.Compilation.Dialects
 
         public override string RawSql(RawSqlOperation operation)
         {
-            if (operation.SqlByDialect.TryGetValue("postgresql", out var value) || operation.SqlByDialect.TryGetValue("any", out value))
+            return ResolveDialectSql(operation.SqlByDialect, operation.Table, "W032");
+        }
+
+        /// <summary>
+        /// PostgreSQL：IGNORE → ON CONFLICT DO NOTHING；UPDATE → ON CONFLICT (主键) DO UPDATE。
+        /// 冲突目标取累积模型的主键列；拿不到主键时降级为普通 INSERT 并警告。
+        /// </summary>
+        public override string BuildSeed(SeedOperation operation, IReadOnlyList<string> primaryKeyColumns)
+        {
+            string text = BuildSeedInsert(operation);
+            if (string.IsNullOrEmpty(text))
             {
-                return value;
+                return "";
             }
-            return "";
+            if (string.Equals(operation.Conflict, "IGNORE", StringComparison.OrdinalIgnoreCase))
+            {
+                return text + "\nON CONFLICT DO NOTHING;";
+            }
+            if (string.Equals(operation.Conflict, "UPDATE", StringComparison.OrdinalIgnoreCase))
+            {
+                if (primaryKeyColumns == null || primaryKeyColumns.Count == 0)
+                {
+                    Warn("W029", operation.Table, null,
+                        "postgresql 的 SEED conflict=UPDATE 需要主键作为冲突目标，但累积模型中没有该表主键，已按普通 INSERT 生成");
+                    return text + ";";
+                }
+                List<string> list = new List<string>();
+                foreach (string column in operation.Columns)
+                {
+                    list.Add(Quote(column) + " = EXCLUDED." + Quote(column));
+                }
+                return text + "\nON CONFLICT (" + JoinQuoted(primaryKeyColumns) + ") DO UPDATE SET "
+                    + string.Join(", ", list) + ";";
+            }
+            return text + ";";
         }
 
         private string BuildColumnDefinition(ColumnDefinition column, string table)
@@ -316,4 +471,3 @@ namespace DbChronicle.Compilation.Dialects
     }
 
 }
-

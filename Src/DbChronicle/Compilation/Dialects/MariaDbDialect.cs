@@ -1,6 +1,10 @@
 using System.Security.Cryptography;
 using System.Text;
-using DbChronicle.Domain.Operations;
+
+using DbChronicle.Common.Enums;
+using DbChronicle.Models.Operations;
+using DbChronicle.Models;
+
 namespace DbChronicle.Compilation.Dialects
 {
     public sealed class MariaDbDialect : MySqlDialect
@@ -46,7 +50,7 @@ namespace DbChronicle.Compilation.Dialects
 
         private static string ShortHash(string value)
         {
-            using SHA256 sHA = SHA256.Create();
+using SHA256 sHA = SHA256.Create();
             byte[] array = sHA.ComputeHash(Encoding.UTF8.GetBytes(value));
             StringBuilder stringBuilder = new StringBuilder(8);
             for (int i = 0; i < 4; i++)
@@ -57,5 +61,3 @@ namespace DbChronicle.Compilation.Dialects
         }
     }
 }
-
-

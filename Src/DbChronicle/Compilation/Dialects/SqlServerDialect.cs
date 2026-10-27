@@ -1,8 +1,12 @@
-using System;
 using System.Collections.Generic;
 using System.Security.Cryptography;
 using System.Text;
-using DbChronicle.Domain.Operations;
+using System;
+
+using DbChronicle.Common.Enums;
+using DbChronicle.Models.Operations;
+using DbChronicle.Models;
+
 namespace DbChronicle.Compilation.Dialects 
 {
     public sealed class SqlServerDialect : SqlDialectBase
@@ -18,7 +22,7 @@ namespace DbChronicle.Compilation.Dialects
 
         public override string Quote(string identifier)
         {
-            return "[" + identifier + "]";
+            return "[" + (identifier ?? "").Replace("]", "]]") + "]";
         }
 
         public override string EscapeString(string value)
@@ -44,7 +48,7 @@ namespace DbChronicle.Compilation.Dialects
             stringBuilder.Append("\n);");
             if (!string.IsNullOrEmpty(operation.Comment))
             {
-                Warn("W006", operation.Table, null, "SQL Server 的表注释需要扩展属性，一期跳过");
+                stringBuilder.Append('\n').Append(BuildCommentScript(operation.Table, null, null, operation.Comment));
             }
             return stringBuilder.ToString();
         }
@@ -61,31 +65,114 @@ namespace DbChronicle.Compilation.Dialects
 
         public override string CommentTable(CommentTableOperation operation)
         {
-            Warn("W006", operation.Table, null, "SQL Server 的表注释需要 sp_addextendedproperty，一期跳过");
-            return "";
+            return BuildCommentScript(operation.Table, null, null, operation.Comment);
+        }
+
+        public override string CommentIndex(IndexOperation operation)
+        {
+            return BuildCommentScript(operation.Table, "INDEX", operation.Name, operation.Comment);
+        }
+
+        public override string View(ViewOperation operation)
+        {
+            if (operation.Action == ObjectAction.Drop)
+            {
+                return "DROP VIEW IF EXISTS " + Quote(operation.Name) + ";";
+            }
+            string columns = string.IsNullOrEmpty(operation.Columns) ? "" : " (" + operation.Columns + ")";
+            return "CREATE OR ALTER VIEW " + Quote(operation.Name) + columns + " AS\n" + operation.Select + ";";
+        }
+
+        public override string Sequence(SequenceOperation operation)
+        {
+            if (operation.Action == ObjectAction.Drop)
+            {
+                return "DROP SEQUENCE IF EXISTS " + Quote(operation.Name) + ";";
+            }
+
+            StringBuilder stringBuilder = new StringBuilder();
+            if (operation.Action == ObjectAction.Replace || operation.Action == ObjectAction.Modify)
+            {
+                stringBuilder.Append("DROP SEQUENCE IF EXISTS ").Append(Quote(operation.Name)).AppendLine(";");
+            }
+            stringBuilder.Append("CREATE SEQUENCE ").Append(Quote(operation.Name));
+            if (operation.StartWith.HasValue)
+            {
+                stringBuilder.Append(" START WITH ").Append(operation.StartWith.Value);
+            }
+            if (operation.IncrementBy.HasValue)
+            {
+                stringBuilder.Append(" INCREMENT BY ").Append(operation.IncrementBy.Value);
+            }
+            if (operation.MinValue.HasValue)
+            {
+                stringBuilder.Append(" MINVALUE ").Append(operation.MinValue.Value);
+            }
+            if (operation.MaxValue.HasValue)
+            {
+                stringBuilder.Append(" MAXVALUE ").Append(operation.MaxValue.Value);
+            }
+            if (operation.Cycle.HasValue)
+            {
+                stringBuilder.Append(operation.Cycle.Value ? " CYCLE" : " NO CYCLE");
+            }
+            if (operation.Cache.HasValue)
+            {
+                stringBuilder.Append(" CACHE ").Append(operation.Cache.Value);
+            }
+            stringBuilder.Append(';');
+            return stringBuilder.ToString();
+        }
+
+        public override string CommentConstraint(ConstraintCommentOperation operation)
+        {
+            return BuildCommentScript(operation.Table, "CONSTRAINT", operation.Name, operation.Comment);
+        }
+
+        /// <summary>
+        /// SQL Server 的注释通过扩展属性实现：表级为 level2=null，列/索引/约束分别带 level2type。
+        /// 已存在则走 sp_updateextendedproperty，避免重复执行报错。
+        /// </summary>
+        private string BuildCommentScript(string table, string level2Type, string level2Name, string comment)
+        {
+            string objectId = "OBJECT_ID(N'" + EscapeString(Quote(table)) + "')";
+            string minorId = "0";
+            string levelArgs = "";
+            if (!string.IsNullOrEmpty(level2Type))
+            {
+                levelArgs = ", N'" + level2Type + "', N'" + EscapeString(level2Name) + "'";
+                if (level2Type == "COLUMN")
+                {
+                    minorId = "COLUMNPROPERTY(" + objectId + ", N'" + EscapeString(level2Name) + "', 'ColumnId')";
+                }
+                else if (level2Type == "INDEX")
+                {
+                    minorId = "(SELECT index_id FROM sys.indexes WHERE object_id = " + objectId + " AND name = N'" + EscapeString(level2Name) + "')";
+                }
+                else
+                {
+                    minorId = "(SELECT object_id FROM sys.objects WHERE parent_object_id = " + objectId + " AND name = N'" + EscapeString(level2Name) + "')";
+                }
+            }
+
+            string value = (comment == null) ? "NULL" : ("N'" + EscapeString(comment) + "'");
+            string args = "N'MS_Description', " + value + ", N'SCHEMA', N'dbo', N'TABLE', N'" + EscapeString(table) + "'" + levelArgs;
+            return "IF EXISTS (SELECT 1 FROM sys.extended_properties WHERE class = 1 AND name = N'MS_Description' AND major_id = "
+                + objectId + " AND minor_id = " + minorId + ")\n"
+                + "    EXEC sp_updateextendedproperty " + args + ";\n"
+                + "ELSE\n"
+                + "    EXEC sp_addextendedproperty " + args + ";";
         }
 
         public override string AddColumn(ColumnOperation operation)
         {
             StringBuilder stringBuilder = new StringBuilder();
             stringBuilder.Append("ALTER TABLE ").Append(Quote(operation.Table)).Append(" ADD ")
-                .Append(BuildColumnDefinition(operation.Definition, operation.Table, inlineDefault: false))
+                .Append(BuildColumnDefinition(operation.Definition, operation.Table, inlineDefault: true))
                 .Append(';');
-            DefaultValueSpec defaultValueSpec = operation.Definition.DefaultValue ?? DefaultValueSpec.Undeclared;
-            if (defaultValueSpec.IsDeclared && !defaultValueSpec.IsNone)
+            if (!string.IsNullOrEmpty(operation.Definition.Comment))
             {
-                string identifier = BuildDefaultConstraintName(operation.Table, operation.Name);
-                stringBuilder.Append("\nALTER TABLE ").Append(Quote(operation.Table)).Append(" ADD CONSTRAINT ")
-                    .Append(Quote(identifier))
-                    .Append(" DEFAULT ")
-                    .Append(defaultValueSpec.IsNullLiteral ? "NULL" : FormatDefaultValue(defaultValueSpec.RawValue))
-                    .Append(" FOR ")
-                    .Append(Quote(operation.Name))
-                    .Append(';');
-            }
-            if (operation.Definition.Comment != null)
-            {
-                Warn("W007", operation.Table, operation.Name, "SQL Server 的列注释需要 sp_addextendedproperty，一期跳过");
+                stringBuilder.Append('\n').Append(BuildCommentScript(operation.Table, "COLUMN", operation.Name, operation.Definition.Comment));
             }
             return stringBuilder.ToString();
         }
@@ -98,19 +185,25 @@ namespace DbChronicle.Compilation.Dialects
                 Warn("W008", operation.Table, operation.Name, "缺少完整列定义，无法生成 ALTER COLUMN");
                 return "";
             }
+
+            if (!definition.Nullable.HasValue)
+            {
+                Warn("W008", operation.Table, operation.Name, "MODIFY 未声明 nullable，按 NULL 生成可空列");
+            }
+
             List<string> list = new List<string>();
             string identifier = BuildDefaultConstraintName(operation.Table, operation.Name);
             string text = Quote(operation.Table);
-            list.Add("ALTER TABLE " + text + " DROP CONSTRAINT IF EXISTS " + Quote(identifier) + ";");
+            list.Add("IF OBJECT_ID(N'" + EscapeString(identifier) + "', N'D') IS NOT NULL ALTER TABLE " + text + " DROP CONSTRAINT " + Quote(identifier) + ";");
             list.Add("ALTER TABLE " + text + " ALTER COLUMN " + Quote(operation.Name) + " " + ResolveType(definition, operation.Table) + ((definition.Nullable == false) ? " NOT NULL" : " NULL") + ";");
             DefaultValueSpec defaultValueSpec = definition.DefaultValue ?? DefaultValueSpec.Undeclared;
             if (defaultValueSpec.IsDeclared && !defaultValueSpec.IsNone)
             {
                 list.Add("ALTER TABLE " + text + " ADD CONSTRAINT " + Quote(identifier) + " DEFAULT " + (defaultValueSpec.IsNullLiteral ? "NULL" : FormatDefaultValue(defaultValueSpec.RawValue)) + " FOR " + Quote(operation.Name) + ";");
             }
-            if (definition.Comment != null)
+            if (!string.IsNullOrEmpty(definition.Comment))
             {
-                Warn("W007", operation.Table, operation.Name, "SQL Server 的列注释需要 sp_addextendedproperty，一期跳过");
+                list.Add(BuildCommentScript(operation.Table, "COLUMN", operation.Name, definition.Comment));
             }
             return string.Join("\n", list);
         }
@@ -127,13 +220,13 @@ namespace DbChronicle.Compilation.Dialects
 
         public override string CommentColumn(ColumnOperation operation)
         {
-            Warn("W007", operation.Table, operation.Name, "SQL Server 的列注释需要 sp_addextendedproperty，一期跳过");
-            return "";
+            return BuildCommentScript(operation.Table, "COLUMN", operation.Name, operation.Comment ?? operation.Definition.Comment);
         }
 
         public override string ReorderColumn(ColumnOperation operation)
         {
-            Warn("W010", operation.Table, operation.Name, "SQL Server 不支持列顺序调整，已忽略");
+            Error("E044", operation.Table, operation.Name,
+                "SQL Server 不支持调整列顺序。请删除该 REORDER 操作，或改用 <rawSql> 按方言重建表");
             return "";
         }
 
@@ -154,7 +247,7 @@ namespace DbChronicle.Compilation.Dialects
             WarnIndexTypeUnsupported(operation);
             if (!string.IsNullOrEmpty(operation.Expression) || !string.IsNullOrEmpty(operation.Where))
             {
-                Warn("W021", operation.Table, null, "SQL Server 不支持该索引写法，expression / where 被忽略");
+                Warn("W027", operation.Table, null, "SQL Server 不支持该索引写法，expression / where 被忽略");
             }
             return "CREATE " + (operation.Unique ? "UNIQUE " : "") + "INDEX " + Quote(operation.Name) + " ON " + Quote(operation.Table) + " (" + JoinQuoted(operation.Columns) + ");";
         }
@@ -234,11 +327,7 @@ namespace DbChronicle.Compilation.Dialects
 
         public override string RawSql(RawSqlOperation operation)
         {
-            if (operation.SqlByDialect.TryGetValue("sqlserver", out var value) || operation.SqlByDialect.TryGetValue("any", out value))
-            {
-                return value;
-            }
-            return "";
+            return ResolveDialectSql(operation.SqlByDialect, operation.Table, "W032");
         }
 
         private string BuildColumnDefinition(ColumnDefinition column, string table, bool inlineDefault)
@@ -310,7 +399,7 @@ namespace DbChronicle.Compilation.Dialects
 
         private static string ShortHash(string value)
         {
-            using SHA256 sHA = SHA256.Create();
+using SHA256 sHA = SHA256.Create();
             byte[] array = sHA.ComputeHash(Encoding.UTF8.GetBytes(value));
             StringBuilder stringBuilder = new StringBuilder(8);
             for (int i = 0; i < 4; i++)
@@ -321,5 +410,3 @@ namespace DbChronicle.Compilation.Dialects
         }
     }
 }
-
-

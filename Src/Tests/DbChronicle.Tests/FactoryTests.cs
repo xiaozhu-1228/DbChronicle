@@ -1,14 +1,12 @@
-using System;
 using System.Collections.Generic;
 using System.IO;
-using DbChronicle.Abstractions.Diagnostics;
-using DbChronicle.Compilation.Compiler;
-using DbChronicle.Compilation.Splitting;
-using DbChronicle.Domain.Sql;
-using DbChronicle.Domain.Structures;
+using System;
+
+using DbChronicle.Common.Enums;
 using DbChronicle.Configuration;
-using DbChronicle.Abstractions.Execution;
-using DbChronicle.Runtime.Execution;
+using DbChronicle.Embedded;
+using DbChronicle.Execution;
+using DbChronicle.Models;
 using Xunit;
 
 namespace DbChronicle.Tests
@@ -36,6 +34,56 @@ namespace DbChronicle.Tests
                 Assert.Contains("CREATE TABLE IF NOT EXISTS `t`", sql);
                 Assert.Single(chronicle.LoadUnits());
                 Assert.DoesNotContain(chronicle.Check(), x => x.Severity == DiagnosticSeverity.Error);
+            }
+        }
+
+        [Fact]
+        public void Factory_DbUpgrade_ShouldReturnSql_WhenDryRun()
+        {
+            var directory = TestSupport.CreateMigrationsDirectory();
+            TestSupport.WriteUnit(directory, "00000000_000000_baseline",
+                "  <table name=\"t\" action=\"CREATE\">\n"
+                + "    <column name=\"id\" action=\"ADD\" type=\"Int64\" primaryKey=\"true\" autoIncrement=\"true\" nullable=\"false\"/>\n"
+                + "  </table>");
+
+            var configPath = Path.Combine(directory, ConfigLoader.DefaultFileName);
+            var config = ConfigLoader.CreateDefault(configPath);
+            config.Database.Dialect = "mysql";
+            config.Paths.Migrations = ".";
+            ConfigLoader.Save(config, configPath);
+
+            using (var chronicle = DbChronicleFactory.Create(new OfflineExecutor(), o => o.ConfigPath = configPath))
+            {
+                var result = chronicle.DbUpgrade(new DbUpgradeOptions { DryRun = true });
+
+                Assert.True(result.Success);
+                Assert.Equal(0, result.AppliedCount);
+                Assert.Contains("CREATE TABLE IF NOT EXISTS `t`", result.Sql);
+            }
+        }
+
+        [Fact]
+        public void Factory_ShouldAcceptProvidedConfig()
+        {
+            var directory = TestSupport.CreateMigrationsDirectory();
+            TestSupport.WriteUnit(directory, "00000000_000000_baseline",
+                "  <table name=\"t\" action=\"CREATE\">\n"
+                + "    <column name=\"id\" action=\"ADD\" type=\"Int64\" primaryKey=\"true\" autoIncrement=\"true\" nullable=\"false\"/>\n"
+                + "  </table>");
+
+            var configPath = Path.Combine(directory, ConfigLoader.DefaultFileName);
+            var saved = ConfigLoader.CreateDefault(configPath);
+            saved.Database.Dialect = "mysql";
+            saved.Paths.Migrations = ".";
+            ConfigLoader.Save(saved, configPath);
+
+            var provided = ConfigLoader.Load(configPath);
+
+            using (var chronicle = DbChronicleFactory.Create(new OfflineExecutor(),
+                new DbChronicleOptions { Config = provided }))
+            {
+                Assert.Same(provided, chronicle.Config);
+                Assert.Contains("CREATE TABLE IF NOT EXISTS `t`", chronicle.Compile());
             }
         }
 

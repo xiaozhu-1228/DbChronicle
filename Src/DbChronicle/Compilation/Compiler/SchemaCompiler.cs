@@ -1,14 +1,13 @@
-using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System;
+
+using DbChronicle.Common.Enums;
+using DbChronicle.Common;
 using DbChronicle.Compilation.Dialects;
-using DbChronicle.Domain.Model;
-using DbChronicle.Domain.Operations;
-using DbChronicle.Abstractions.Diagnostics;
-using DbChronicle.Compilation.Splitting;
-using DbChronicle.Domain.Sql;
-using DbChronicle.Domain.Structures;
+using DbChronicle.Models.Operations;
+using DbChronicle.Models;
 
 namespace DbChronicle.Compilation.Compiler
 {
@@ -42,14 +41,14 @@ namespace DbChronicle.Compilation.Compiler
             IReadOnlyList<SchemaOperation> readOnlyList = Order(operations);
             foreach (SchemaOperation item in readOnlyList)
             {
-                if (!flag && Rank(item) >= 40)
+                if (!flag && Rank(item) >= 26)
                 {
                     EmitRebuilds(unit, list, targetModel, compileResult);
                     flag = true;
                 }
                 if (!ShouldSkipForRebuild(item, list))
                 {
-                    AddStatements(compileResult, Dispatch(item));
+                    AddStatements(compileResult, Dispatch(item), item.Table);
                 }
             }
             if (!flag)
@@ -64,20 +63,41 @@ namespace DbChronicle.Compilation.Compiler
             return compileResult;
         }
 
-        private void AddStatements(CompileResult result, string sql)
+        private void AddStatements(CompileResult result, string sql, string table)
         {
             if (string.IsNullOrWhiteSpace(sql))
             {
                 return;
             }
-            foreach (string item in SqlStatementSplitter.Split(sql, _dialect.Name, _options.StatementDelimiter))
+
+            IReadOnlyList<string> statements;
+            try
             {
-                result.Statements.Add(new SqlStatement
+                statements = SqlStatementSplitter.Split(sql, _dialect.Name, _options.StatementDelimiter);
+            }
+            catch (InvalidOperationException ex)
+            {
+                result.Diagnostics.Add(new CompileDiagnostic
+                {
+                    Code = "E042",
+                    Severity = DiagnosticSeverity.Error,
+                    ChangeId = _dialect.Context.ChangeId,
+                    Message = ex.Message
+                });
+                return;
+            }
+
+            var group = result.GroupFor(table);
+            foreach (string item in statements)
+            {
+                var statement = new SqlStatement
                 {
                     Index = result.Statements.Count,
                     Text = item,
                     Hash = SqlStatement.ComputeHash(item)
-                });
+                };
+                result.Statements.Add(statement);
+                group.Statements.Add(statement);
             }
         }
 
@@ -144,6 +164,10 @@ namespace DbChronicle.Compilation.Compiler
             return list;
         }
 
+        /// <summary>
+        /// 旧版本曾在数据库中创建的版本表名：当前版本状态已改为本地文件，
+        /// 但历史库可能仍留有这两张表，通配符展开时继续排除，避免误改。
+        /// </summary>
         private static bool IsSystemTable(string table)
         {
             return string.Equals(table, "dbchronicle_version_log", StringComparison.OrdinalIgnoreCase) || string.Equals(table, "dbchronicle_version_stmt_log", StringComparison.OrdinalIgnoreCase);
@@ -205,7 +229,8 @@ namespace DbChronicle.Compilation.Compiler
             {
                 return false;
             }
-            return operation is ColumnOperation || operation is PrimaryKeyOperation || operation is ForeignKeyOperation || operation is UniqueConstraintOperation;
+            return operation is ColumnOperation || operation is PrimaryKeyOperation || operation is ForeignKeyOperation
+                || operation is CheckConstraintOperation || operation is DefaultConstraintOperation;
         }
 
         private StructureModel BuildTargetModel(ChangeUnit unit)
@@ -237,7 +262,9 @@ namespace DbChronicle.Compilation.Compiler
                 }
                 else
                 {
-                    AddStatements(result, _dialect.RebuildTable(BuildRebuildOperation(unit, rebuildTable, table)));
+                    result.Diagnostics.Add(CompileDiagnostic.Warning("W030",
+                        "表 " + rebuildTable + " 走重建策略：不恢复历史索引（外键与检查约束由目标模型重放，需要时请在本单元重建索引或用 <rawSql>）"));
+                    AddStatements(result, _dialect.RebuildTable(BuildRebuildOperation(unit, rebuildTable, table)), rebuildTable);
                 }
             }
         }
@@ -256,6 +283,14 @@ namespace DbChronicle.Compilation.Compiler
                 }
             }
             rebuildTableOperation.PrimaryKeyColumns.AddRange(tableModel.PrimaryKeyColumns);
+            foreach (ForeignKeyOperation foreignKey in tableModel.ForeignKeys)
+            {
+                rebuildTableOperation.ForeignKeys.Add(foreignKey);
+            }
+            foreach (CheckConstraintOperation check in tableModel.CheckConstraints)
+            {
+                rebuildTableOperation.CheckConstraints.Add(check);
+            }
             if (_model != null && _model.TryGetTable(table, out var table2))
             {
                 foreach (ColumnDefinition column in rebuildTableOperation.Columns)
@@ -263,6 +298,14 @@ namespace DbChronicle.Compilation.Compiler
                     if (table2.Columns.ContainsKey(column.Name))
                     {
                         rebuildTableOperation.ColumnMappings.Add(new KeyValuePair<string, string>(column.Name, column.Name));
+                    }
+
+                    ColumnDefinition previousColumn;
+                    if (table2.Columns.TryGetValue(column.Name, out previousColumn)
+                        && previousColumn.Type.HasValue
+                        && column.Type.HasValue)
+                    {
+                        rebuildTableOperation.ColumnSourceTypes[column.Name] = previousColumn.Type.Value;
                     }
                 }
                 foreach (SchemaOperation operation in unit.Operations)
@@ -316,29 +359,21 @@ namespace DbChronicle.Compilation.Compiler
             {
                 return (operation.Stage != 0) ? 40 : 0;
             }
-            if (operation is ForeignKeyOperation foreignKeyOperation)
-            {
-                return (foreignKeyOperation.Action == ObjectAction.Drop) ? 10 : 30;
-            }
-            if (operation is IndexOperation indexOperation)
-            {
-                return (indexOperation.Action == ObjectAction.Drop) ? 11 : 29;
-            }
             if (operation is UniqueConstraintOperation uniqueConstraintOperation)
             {
-                return (uniqueConstraintOperation.Action == ObjectAction.Drop) ? 12 : 26;
+                return (uniqueConstraintOperation.Action == ObjectAction.Drop) ? 12 : 27;
             }
             if (operation is CheckConstraintOperation checkConstraintOperation)
             {
-                return (checkConstraintOperation.Action == ObjectAction.Drop) ? 13 : 27;
+                return (checkConstraintOperation.Action == ObjectAction.Drop) ? 13 : 28;
             }
             if (operation is DefaultConstraintOperation defaultConstraintOperation)
             {
-                return (defaultConstraintOperation.Action == ObjectAction.Drop) ? 14 : 28;
+                return (defaultConstraintOperation.Action == ObjectAction.Drop) ? 14 : 29;
             }
             if (operation is PrimaryKeyOperation primaryKeyOperation)
             {
-                return (primaryKeyOperation.Action == ObjectAction.Drop) ? 15 : 25;
+                return (primaryKeyOperation.Action == ObjectAction.Drop) ? 15 : 26;
             }
             if (operation is ColumnOperation columnOperation)
             {
@@ -363,11 +398,42 @@ namespace DbChronicle.Compilation.Compiler
             }
             if (operation is RenameTableOperation)
             {
-                return 21;
+                // 重命名表排在全部列操作之后：同单元内先改列（旧表名）再改名
+                return 25;
+            }
+            if (operation is IndexOperation indexOperation)
+            {
+                if (indexOperation.Action == ObjectAction.Comment)
+                {
+                    return 33;
+                }
+                return (indexOperation.Action == ObjectAction.Drop) ? 11 : 30;
+            }
+            if (operation is ForeignKeyOperation foreignKeyOperation)
+            {
+                return (foreignKeyOperation.Action == ObjectAction.Drop) ? 10 : 31;
             }
             if (operation is CommentTableOperation)
             {
-                return 31;
+                return 32;
+            }
+            if (operation is ConstraintCommentOperation)
+            {
+                return 34;
+            }
+            if (operation is TableOptionOperation)
+            {
+                return 35;
+            }
+            if (operation is ViewOperation viewOperation)
+            {
+                // 视图依赖表结构，排在全部表级/列级变更之后
+                return (viewOperation.Action == ObjectAction.Drop) ? 9 : 36;
+            }
+            if (operation is SequenceOperation sequenceOperation)
+            {
+                // 序列可能被建表的 DEFAULT nextval 引用，排在建表之前；删除排在最后
+                return (sequenceOperation.Action == ObjectAction.Drop) ? 37 : 18;
             }
             return 50;
         }
@@ -416,7 +482,15 @@ namespace DbChronicle.Compilation.Compiler
                 {
                     return _dialect.RenameIndex(indexOperation);
                 }
+                if (indexOperation.Action == ObjectAction.Comment)
+                {
+                    return _dialect.CommentIndex(indexOperation);
+                }
                 return _dialect.CreateIndex(indexOperation);
+            }
+            if (operation is ConstraintCommentOperation constraintCommentOperation)
+            {
+                return _dialect.CommentConstraint(constraintCommentOperation);
             }
             if (operation is ForeignKeyOperation foreignKeyOperation)
             {
@@ -442,6 +516,18 @@ namespace DbChronicle.Compilation.Compiler
             {
                 return (defaultConstraintOperation.Action == ObjectAction.Drop) ? _dialect.DropDefaultConstraint(defaultConstraintOperation) : _dialect.AddDefaultConstraint(defaultConstraintOperation);
             }
+            if (operation is ViewOperation viewOperation)
+            {
+                return _dialect.View(viewOperation);
+            }
+            if (operation is SequenceOperation sequenceOperation)
+            {
+                return _dialect.Sequence(sequenceOperation);
+            }
+            if (operation is TableOptionOperation tableOptionOperation)
+            {
+                return _dialect.TableOption(tableOptionOperation);
+            }
             if (operation is RawSqlOperation operation7)
             {
                 return _dialect.RawSql(operation7);
@@ -451,6 +537,12 @@ namespace DbChronicle.Compilation.Compiler
                 if (dataMigrationOperation.SqlByDialect.TryGetValue(_dialect.Name, out var value) || dataMigrationOperation.SqlByDialect.TryGetValue("any", out value))
                 {
                     return value;
+                }
+                if (dataMigrationOperation.SqlByDialect.Count > 0)
+                {
+                    _dialect.Context.Warn("W033", dataMigrationOperation.Table, null,
+                        "未提供 " + _dialect.Name + " 方言的数据迁移 SQL（节点只声明了 "
+                        + string.Join(" / ", new List<string>(dataMigrationOperation.SqlByDialect.Keys)) + "），已跳过");
                 }
                 return "";
             }
@@ -472,19 +564,21 @@ namespace DbChronicle.Compilation.Compiler
             }
             if (operation is SeedOperation seed)
             {
-                return BuildSeed(seed);
+                return _dialect.BuildSeed(seed, PrimaryKeyColumnsOf(seed.Table));
             }
             return "";
         }
 
         private string DispatchColumn(ColumnOperation operation)
         {
-            ColumnDefinition columnDefinition = ResolveDefinition(operation);
+            ColumnDefinition previousDefinition;
+            ColumnDefinition columnDefinition = ResolveDefinition(operation, out previousDefinition);
             ColumnOperation operation2 = new ColumnOperation
             {
                 Table = operation.Table,
                 Action = operation.Action,
                 Definition = columnDefinition,
+                PreviousDefinition = previousDefinition,
                 RenamedFrom = operation.RenamedFrom,
                 After = operation.After,
                 Comment = operation.Comment,
@@ -513,8 +607,9 @@ namespace DbChronicle.Compilation.Compiler
             }
         }
 
-        private ColumnDefinition ResolveDefinition(ColumnOperation operation)
+        private ColumnDefinition ResolveDefinition(ColumnOperation operation, out ColumnDefinition previousDefinition)
         {
+            previousDefinition = null;
             if (operation.Action == ColumnAction.Add || operation.Action == ColumnAction.Drop)
             {
                 return operation.Definition;
@@ -538,6 +633,7 @@ namespace DbChronicle.Compilation.Compiler
                 WarnIncrementalMissing(operation, name, "该列不在变更链中");
                 return operation.Definition;
             }
+            previousDefinition = definition;
             return ColumnMerger.Merge(definition, operation.Definition);
         }
 
@@ -546,43 +642,16 @@ namespace DbChronicle.Compilation.Compiler
             _dialect.Context.Warn("W014", operation.Table, column, "无法补全未写属性（" + reason + "），该列按已写内容生成");
         }
 
-        private string BuildSeed(SeedOperation seed)
+        /// <summary>累积模型中该表的主键列（供 SEED 等需要冲突目标的方言使用；无模型时返回空）。</summary>
+        private List<string> PrimaryKeyColumnsOf(string table)
         {
-            if (seed.Rows.Count == 0 || seed.Columns.Count == 0)
+            var result = new List<string>();
+            TableModel tableModel;
+            if (_model != null && _model.TryGetTable(table, out tableModel))
             {
-                return "";
+                result.AddRange(tableModel.PrimaryKeyColumns);
             }
-            List<string> list = new List<string>();
-            foreach (List<string> row in seed.Rows)
-            {
-                List<string> list2 = new List<string>();
-                foreach (string item in row)
-                {
-                    list2.Add(item);
-                }
-                list.Add("(" + string.Join(", ", list2) + ")");
-            }
-            List<string> list3 = new List<string>();
-            foreach (string column in seed.Columns)
-            {
-                list3.Add(_dialect.Quote(column));
-            }
-            StringBuilder stringBuilder = new StringBuilder();
-            stringBuilder.Append("INSERT INTO ").Append(_dialect.Quote(seed.Table)).Append(" (")
-                .Append(string.Join(", ", list3))
-                .Append(") VALUES\n")
-                .Append(string.Join(",\n", list));
-            if (string.Equals(seed.Conflict, "UPDATE", StringComparison.OrdinalIgnoreCase) && _dialect.Name == "mysql")
-            {
-                List<string> list4 = new List<string>();
-                foreach (string column2 in seed.Columns)
-                {
-                    list4.Add(_dialect.Quote(column2) + " = VALUES(" + _dialect.Quote(column2) + ")");
-                }
-                stringBuilder.Append("\nON DUPLICATE KEY UPDATE ").Append(string.Join(", ", list4));
-            }
-            stringBuilder.Append(';');
-            return stringBuilder.ToString();
+            return result;
         }
 
         private string BuildScript(ChangeUnit unit, CompileResult result)
@@ -622,4 +691,3 @@ namespace DbChronicle.Compilation.Compiler
     }
 
 }
-

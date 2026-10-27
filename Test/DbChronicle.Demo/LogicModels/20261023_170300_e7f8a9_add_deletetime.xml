@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<changeUnit id="20261023_170300_e7f8a9" author="demo" release="20261023">
+  <description>所有表补充 deletetime 字段</description>
+
+  <table name="*" action="ALTER">
+    <column name="deletetime" action="ADD" type="DateTimeOffset"
+            nullable="true"
+            comment="软删除时间（UTC，带时区）"/>
+  </table>
+</changeUnit>

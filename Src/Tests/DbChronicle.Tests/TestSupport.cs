@@ -1,15 +1,13 @@
-using System;
 using System.IO;
 using System.Linq;
 using System.Text;
-using DbChronicle.Abstractions.Diagnostics;
+using System;
+
+using DbChronicle.Common.Enums;
 using DbChronicle.Compilation.Compiler;
-using DbChronicle.Compilation.Splitting;
-using DbChronicle.Domain.Sql;
-using DbChronicle.Domain.Structures;
-using DbChronicle.Configuration;
 using DbChronicle.Compilation.Dialects;
-using DbChronicle.Domain.Model;
+using DbChronicle.Configuration;
+using DbChronicle.Models;
 using DbChronicle.Parsing;
 
 namespace DbChronicle.Tests

@@ -1,0 +1,10 @@
+* text=auto
+
+# 变更单元参与 checksum（SHA-256 原始字节）校验，禁止任何换行 / 编码转换
+migrations/** -text
+Test/samples/migrations/** -text
+Test/DbChronicle.Demo/LogicModels/** -text
+
+*.md text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf

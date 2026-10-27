@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Demo 只保留一份配置：database dialect 决定跑哪个方言（mysql / postgresql，pgsql 视为 postgresql 别名）。
+  连接串由环境变量提供（DBCHRONICLE_DEMO_MYSQL / DBCHRONICLE_DEMO_PG），只决定连哪个库。
+  状态目录按方言自动隔离（versionLog 的 ${environment} 会被覆盖为 mysql / pgsql）。
+-->
+<dbchronicle>
+  <component name="DbChronicle" version="1.0.0" />
+  <database dialect="pgsql" version="18.3" />
+  <environment>demo</environment>
+  <paths migrations="../LogicModels"
+         versionLog="./version_log/${environment}"
+         output="./output" />
+  <!-- Demo 不设基线、也不含建表单元：表由既有系统创建，场景在准备阶段模拟 -->
+  <baseline file="" frozen="false" frozenAt="" />
+  <!--
+    没有基线 / 建表单元，即没有累积模型基底，因此用 full 写法（MODIFY 写全 type 与 nullable），
+    避免出现"无法补全"的 W014；有基线的项目可改回 incrementalModify="true" 只写变化项。
+  -->
+  <options quoteIdentifiers="true" includeComments="true" includeRollback="false"
+           statementDelimiter=";" allowDestructive="false"
+           lockTimeoutSeconds="10" incrementalModify="false"
+           commitScope="table" commitBatchSize="10" />
+</dbchronicle>

@@ -1,16 +1,19 @@
-using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Security.Cryptography;
-using System.Text;
 using System.Text.RegularExpressions;
+using System.Text;
 using System.Xml.Linq;
-using DbChronicle.Abstractions.Diagnostics;
+using System;
+
+using DbChronicle.Common.Enums;
 using DbChronicle.Configuration;
-using DbChronicle.Domain.Model;
-using DbChronicle.Domain.Operations;
+using DbChronicle.Diagnostics;
+using DbChronicle.Models.Operations;
+using DbChronicle.Models;
+
 namespace DbChronicle.Parsing
 {
     public sealed class ChangeUnitParser
@@ -81,20 +84,33 @@ namespace DbChronicle.Parsing
             {
                 var operation = new RawSqlOperation();
                 ReadDialectSql(rawSql, operation.SqlByDialect);
-                operation.Stage = ParseStage(rawSql);
+                operation.Stage = ParseStage(unit, rawSql, null, null);
                 unit.Operations.Add(operation);
             }
 
-            foreach (var name in new[] { "view", "sequence", "trigger", "procedure", "function" })
+            foreach (var element in root.Elements("view"))
+            {
+                ParseView(unit, element);
+            }
+
+            foreach (var element in root.Elements("sequence"))
+            {
+                ParseSequence(unit, element);
+            }
+
+            // 触发器 / 存储过程 / 函数：语法差异是结构性的，按方言写 SQL 原样透传
+            foreach (var name in new[] { "trigger", "procedure", "function" })
             {
                 foreach (var element in root.Elements(name))
                 {
                     var operation = new RawSqlOperation { Table = Attr(element, "name") };
                     ReadDialectSql(element, operation.SqlByDialect);
+                    operation.Stage = ParseStage(unit, element, Attr(element, "name"), null);
                     unit.Operations.Add(operation);
                 }
             }
 
+            ValidateDuplicates(unit);
             ValidateBaselineFrozen(unit);
             return unit;
         }
@@ -112,6 +128,88 @@ namespace DbChronicle.Parsing
                 }
                 return sb.ToString();
             }
+        }
+
+        /// <summary>
+        /// 视图：有 &lt;select&gt; 时走结构化生成（各方言自动适配 CREATE / CREATE OR REPLACE / CREATE OR ALTER）；
+        /// 只有 &lt;sql dialect="..."&gt; 时保持原样透传（兼容旧写法）。
+        /// </summary>
+        private void ParseView(ChangeUnit unit, XElement element)
+        {
+            var name = Attr(element, "name");
+            if (string.IsNullOrEmpty(name))
+            {
+                AddError(unit, "E048", null, null, "<view> 缺少 name 属性");
+                return;
+            }
+
+            var action = ParseObjectAction(Attr(element, "action"));
+            var selectElement = element.Element("select");
+            var select = selectElement != null ? selectElement.Value.Trim() : Attr(element, "select");
+            if (string.IsNullOrEmpty(select))
+            {
+                if (action == ObjectAction.Drop)
+                {
+                    unit.Operations.Add(new ViewOperation { Table = name, Name = name, Action = ObjectAction.Drop });
+                    return;
+                }
+
+                var raw = new RawSqlOperation { Table = name };
+                ReadDialectSql(element, raw.SqlByDialect);
+                if (raw.SqlByDialect.Count == 0)
+                {
+                    AddError(unit, "E048", name, null,
+                        "<view> 必须提供 <select> 子节点（结构化生成），或按方言的 <sql> 子节点（原样透传）");
+                    return;
+                }
+                unit.Operations.Add(raw);
+                return;
+            }
+
+            unit.Operations.Add(new ViewOperation
+            {
+                Table = name,
+                Name = name,
+                Action = action,
+                Select = select,
+                Columns = Attr(element, "columns"),
+                Comment = Attr(element, "comment")
+            });
+        }
+
+        /// <summary>
+        /// 序列：结构化属性生成（PG / SQL Server 原生支持，其余方言编译报错）；
+        /// 带 &lt;sql&gt; 时按方言原样透传。
+        /// </summary>
+        private void ParseSequence(ChangeUnit unit, XElement element)
+        {
+            var name = Attr(element, "name");
+            if (string.IsNullOrEmpty(name))
+            {
+                AddError(unit, "E049", null, null, "<sequence> 缺少 name 属性");
+                return;
+            }
+
+            if (element.Element("sql") != null)
+            {
+                var raw = new RawSqlOperation { Table = name };
+                ReadDialectSql(element, raw.SqlByDialect);
+                unit.Operations.Add(raw);
+                return;
+            }
+
+            unit.Operations.Add(new SequenceOperation
+            {
+                Table = name,
+                Name = name,
+                Action = ParseObjectAction(Attr(element, "action")),
+                StartWith = LongAttr(element, "start"),
+                IncrementBy = LongAttr(element, "increment"),
+                MinValue = LongAttr(element, "minValue"),
+                MaxValue = LongAttr(element, "maxValue"),
+                Cycle = BoolAttr(element, "cycle"),
+                Cache = LongAttr(element, "cache")
+            });
         }
 
         private void ParseTable(ChangeUnit unit, XElement tableElement)
@@ -168,10 +266,31 @@ namespace DbChronicle.Parsing
                     ParseAlterTable(unit, tableElement, tableName);
                     break;
 
+                case "ENGINE":
+                case "CHARSET":
+                case "TABLESPACE":
+                    var tableOption = new TableOptionOperation
+                    {
+                        Table = tableName,
+                        Engine = Attr(tableElement, "engine"),
+                        Charset = Attr(tableElement, "charset"),
+                        Collate = Attr(tableElement, "collate"),
+                        Tablespace = Attr(tableElement, "tablespace")
+                    };
+                    if (string.IsNullOrEmpty(tableOption.Engine) && string.IsNullOrEmpty(tableOption.Charset)
+                        && string.IsNullOrEmpty(tableOption.Collate) && string.IsNullOrEmpty(tableOption.Tablespace))
+                    {
+                        AddError(unit, "E050", tableName, null,
+                            "<table action=\"ENGINE|CHARSET|TABLESPACE\"> 至少需要 engine / charset / collate / tablespace 之一");
+                        return;
+                    }
+                    unit.Operations.Add(tableOption);
+                    break;
+
                 default:
                     AddError(unit, "E012", tableName, null,
                         "未知的表级 action：" + action
-                        + "（ENGINE / CHARSET / TABLESPACE / PARTITION / GRANT / SYNONYM 请用 <rawSql> 实现）");
+                        + "（PARTITION / GRANT / SYNONYM / 索引提示等请用 <rawSql> 实现）");
                     break;
             }
         }
@@ -213,6 +332,20 @@ namespace DbChronicle.Parsing
                 var localName = element.Name.LocalName;
                 if (localName == "column" || localName == "primaryKey")
                 {
+                    continue;
+                }
+                if (localName == "foreignKey")
+                {
+                    ForeignKeyOperation foreignKey;
+                    if (TryParseForeignKey(unit, element, tableName, out foreignKey))
+                    {
+                        foreignKey.PartOfCreateTable = true;
+                        if (foreignKey.Action != ObjectAction.Drop)
+                        {
+                            operation.ForeignKeys.Add(foreignKey);
+                        }
+                        unit.Operations.Add(foreignKey);
+                    }
                     continue;
                 }
                 ParseTableChild(unit, element, tableName);
@@ -260,33 +393,35 @@ namespace DbChronicle.Parsing
                         Unique = BoolAttr(element, "unique") ?? false,
                         Type = Attr(element, "type"),
                         Expression = Attr(element, "expression"),
-                        Where = Attr(element, "where")
+                        Where = Attr(element, "where"),
+                        Comment = Attr(element, "comment")
                     };
                     FillColumns(element, index.Columns, Attr(element, "columns"));
                     unit.Operations.Add(index);
                     break;
 
-                case "foreignKey":
-                    var foreignKey = new ForeignKeyOperation
+                case "constraintComment":
+                    var constraintComment = new ConstraintCommentOperation
                     {
                         Table = tableName,
-                        Action = ParseObjectAction(Attr(element, "action")),
                         Name = Attr(element, "name"),
-                        RefTable = Attr(element, "refTable"),
-                        OnDelete = Attr(element, "onDelete"),
-                        OnUpdate = Attr(element, "onUpdate")
+                        Kind = Attr(element, "kind"),
+                        Comment = Attr(element, "comment")
                     };
-                    FillColumns(element, foreignKey.Columns, Attr(element, "columns"));
-                    foreach (var name in SplitColumns(Attr(element, "refColumns")))
+                    if (string.IsNullOrEmpty(constraintComment.Name))
                     {
-                        foreignKey.RefColumns.Add(name);
-                    }
-                    if (foreignKey.Action != ObjectAction.Drop && string.IsNullOrEmpty(foreignKey.RefTable))
-                    {
-                        AddError(unit, "E020", tableName, null, "<foreignKey> 缺少 refTable");
+                        AddError(unit, "E043", tableName, null, "<constraintComment> 缺少 name 属性");
                         break;
                     }
-                    unit.Operations.Add(foreignKey);
+                    unit.Operations.Add(constraintComment);
+                    break;
+
+                case "foreignKey":
+                    ForeignKeyOperation tableForeignKey;
+                    if (TryParseForeignKey(unit, element, tableName, out tableForeignKey))
+                    {
+                        unit.Operations.Add(tableForeignKey);
+                    }
                     break;
 
                 case "primaryKey":
@@ -342,14 +477,14 @@ namespace DbChronicle.Parsing
                     var migration = new DataMigrationOperation
                     {
                         Table = tableName,
-                        Stage = ParseStage(element)
+                        Stage = ParseStage(unit, element, tableName, null)
                     };
                     ReadDialectSql(element, migration.SqlByDialect);
                     unit.Operations.Add(migration);
                     break;
 
                 case "seed":
-                    unit.Operations.Add(ParseSeed(element, tableName));
+                    unit.Operations.Add(ParseSeed(unit, element, tableName));
                     break;
 
                 case "update":
@@ -358,7 +493,7 @@ namespace DbChronicle.Parsing
                         Table = tableName,
                         Set = Attr(element, "set"),
                         Where = Attr(element, "where"),
-                        Stage = ParseStage(element)
+                        Stage = ParseStage(unit, element, tableName, null)
                     };
                     if (string.IsNullOrEmpty(update.Set))
                     {
@@ -377,7 +512,7 @@ namespace DbChronicle.Parsing
                     {
                         Table = tableName,
                         Where = Attr(element, "where"),
-                        Stage = ParseStage(element)
+                        Stage = ParseStage(unit, element, tableName, null)
                     });
                     break;
 
@@ -387,7 +522,7 @@ namespace DbChronicle.Parsing
                         Table = tableName,
                         Rules = Attr(element, "rules"),
                         Where = Attr(element, "where"),
-                        Stage = ParseStage(element)
+                        Stage = ParseStage(unit, element, tableName, null)
                     };
                     if (string.IsNullOrEmpty(clean.Rules))
                     {
@@ -404,7 +539,7 @@ namespace DbChronicle.Parsing
                         Column = Attr(element, "column"),
                         Value = Attr(element, "value"),
                         Where = Attr(element, "where"),
-                        Stage = ParseStage(element)
+                        Stage = ParseStage(unit, element, tableName, Attr(element, "column"))
                     };
                     if (string.IsNullOrEmpty(backfill.Column) || backfill.Value == null)
                     {
@@ -418,7 +553,7 @@ namespace DbChronicle.Parsing
                     var raw = new RawSqlOperation
                     {
                         Table = tableName,
-                        Stage = ParseStage(element)
+                        Stage = ParseStage(unit, element, tableName, null)
                     };
                     ReadDialectSql(element, raw.SqlByDialect);
                     unit.Operations.Add(raw);
@@ -430,13 +565,37 @@ namespace DbChronicle.Parsing
             }
         }
 
-        private SeedOperation ParseSeed(XElement element, string tableName)
+        private bool TryParseForeignKey(ChangeUnit unit, XElement element, string tableName, out ForeignKeyOperation foreignKey)
+        {
+            foreignKey = new ForeignKeyOperation
+            {
+                Table = tableName,
+                Action = ParseObjectAction(Attr(element, "action")),
+                Name = Attr(element, "name"),
+                RefTable = Attr(element, "refTable"),
+                OnDelete = Attr(element, "onDelete"),
+                OnUpdate = Attr(element, "onUpdate")
+            };
+            FillColumns(element, foreignKey.Columns, Attr(element, "columns"));
+            foreach (var name in SplitColumns(Attr(element, "refColumns")))
+            {
+                foreignKey.RefColumns.Add(name);
+            }
+            if (foreignKey.Action != ObjectAction.Drop && string.IsNullOrEmpty(foreignKey.RefTable))
+            {
+                AddError(unit, "E020", tableName, null, "<foreignKey> 缺少 refTable");
+                return false;
+            }
+            return true;
+        }
+
+        private SeedOperation ParseSeed(ChangeUnit unit, XElement element, string tableName)
         {
             var seed = new SeedOperation
             {
                 Table = tableName,
                 Conflict = Attr(element, "conflict"),
-                Stage = ParseStage(element)
+                Stage = ParseStage(unit, element, tableName, null)
             };
 
             foreach (var name in SplitColumns(Attr(element, "columns")))
@@ -500,13 +659,31 @@ namespace DbChronicle.Parsing
                 RenamedFrom = Attr(element, "renamedFrom"),
                 After = Attr(element, "after"),
                 Comment = Attr(element, "comment"),
-                Stage = ParseStage(element)
+                Stage = ParseStage(unit, element, tableName, definition.Name)
             };
 
             if (action == ColumnAction.Rename && string.IsNullOrEmpty(operation.RenamedFrom))
             {
                 AddError(unit, "E014", tableName, definition.Name, "RENAME 必须提供 renamedFrom");
                 return null;
+            }
+
+            if (action == ColumnAction.Modify)
+            {
+                if (_config.Options.IncrementalModify)
+                {
+                    if (!HasDeclaredColumnAttribute(element))
+                    {
+                        AddError(unit, "E028", tableName, definition.Name, "MODIFY 在增量模式下至少需要声明一项属性");
+                        return null;
+                    }
+                }
+                else if (!definition.Type.HasValue || !definition.Nullable.HasValue)
+                {
+                    AddError(unit, "E027", tableName, definition.Name,
+                        "MODIFY 在 full 模式（incrementalModify=false）下必须声明 type 与 nullable");
+                    return null;
+                }
             }
 
             return operation;
@@ -552,6 +729,12 @@ namespace DbChronicle.Parsing
             definition.Charset = Attr(element, "charset");
             definition.Collate = Attr(element, "collate");
             definition.ForeignKey = Attr(element, "foreignKey");
+
+            if (!string.IsNullOrEmpty(definition.ForeignKey) && !IsForeignKeyReference(definition.ForeignKey))
+            {
+                AddError(unit, "E031", tableName, name, "foreignKey 格式必须为 表名.列名：" + definition.ForeignKey);
+                return null;
+            }
 
             if (element.Attribute("comment") != null)
             {
@@ -608,7 +791,7 @@ namespace DbChronicle.Parsing
                     && definition.Type != LogicalType.DateTime
                     && definition.Type != LogicalType.DateTimeOffset)
                 {
-                    AddError(unit, "E022", tableName, name, "onUpdate 仅对 DateTime / DateTimeOffset 有效");
+                    AddError(unit, "E025", tableName, name, "onUpdate 仅对 DateTime / DateTimeOffset 有效");
                     return null;
                 }
             }
@@ -815,14 +998,76 @@ namespace DbChronicle.Parsing
             }
         }
 
-        private static OperationStage ParseStage(XElement element)
+        private static OperationStage ParseStage(ChangeUnit unit, XElement element, string table, string column)
         {
             var text = Attr(element, "stage");
-            if (!string.IsNullOrEmpty(text) && string.Equals(text, "before", StringComparison.OrdinalIgnoreCase))
+            if (string.IsNullOrEmpty(text))
+            {
+                return OperationStage.After;
+            }
+
+            if (string.Equals(text, "before", StringComparison.OrdinalIgnoreCase))
             {
                 return OperationStage.Before;
             }
+
+            if (string.Equals(text, "after", StringComparison.OrdinalIgnoreCase))
+            {
+                return OperationStage.After;
+            }
+
+            AddError(unit, "E026", table, column, "stage 仅允许 before / after：" + text);
             return OperationStage.After;
+        }
+
+        private static bool HasDeclaredColumnAttribute(XElement element)
+        {
+            string[] names =
+            {
+                "type", "length", "precision", "scale", "nullable", "defaultValue", "comment",
+                "primaryKey", "autoIncrement", "unique", "unsigned", "onUpdate", "charset", "collate", "foreignKey"
+            };
+
+            foreach (var name in names)
+            {
+                if (element.Attribute(name) != null)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static void ValidateDuplicates(ChangeUnit unit)
+        {
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var operation in unit.Operations)
+            {
+                var column = operation as ColumnOperation;
+                if (column != null)
+                {
+                    var key = (column.Table ?? "") + "." + column.Name;
+                    if (!seen.Add(key))
+                    {
+                        AddError(unit, "E029", column.Table, column.Name, "同一变更单元内，同一表同一列重复出现：" + key);
+                    }
+                    continue;
+                }
+
+                var create = operation as CreateTableOperation;
+                if (create != null)
+                {
+                    foreach (var definition in create.Columns)
+                    {
+                        var key = (create.Table ?? "") + "." + definition.Name;
+                        if (!seen.Add(key))
+                        {
+                            AddError(unit, "E029", create.Table, definition.Name, "同一变更单元内，同一表同一列重复出现：" + key);
+                        }
+                    }
+                }
+            }
         }
 
         private static ObjectAction ParseObjectAction(string text)
@@ -841,6 +1086,8 @@ namespace DbChronicle.Parsing
                     return ObjectAction.Replace;
                 case "MODIFY":
                     return ObjectAction.Modify;
+                case "COMMENT":
+                    return ObjectAction.Comment;
                 default:
                     return ObjectAction.Add;
             }
@@ -889,20 +1136,30 @@ namespace DbChronicle.Parsing
             }
             var current = new StringBuilder();
             var inQuote = false;
-            foreach (var ch in text)
+            for (var i = 0; i < text.Length; i++)
             {
+                var ch = text[i];
                 if (ch == '\'')
                 {
+                    if (inQuote && i + 1 < text.Length && text[i + 1] == '\'')
+                    {
+                        current.Append("''");
+                        i++;
+                        continue;
+                    }
+
                     inQuote = !inQuote;
                     current.Append(ch);
                     continue;
                 }
+
                 if (ch == ',' && !inQuote)
                 {
                     result.Add(current.ToString().Trim());
                     current.Clear();
                     continue;
                 }
+
                 current.Append(ch);
             }
             result.Add(current.ToString().Trim());
@@ -913,6 +1170,17 @@ namespace DbChronicle.Parsing
         {
             return type == LogicalType.Int8 || type == LogicalType.Int16
                 || type == LogicalType.Int32 || type == LogicalType.Int64;
+        }
+
+        /// <summary>列级外键引用必须是「表名.列名」：恰好一个点号，且两端非空。</summary>
+        private static bool IsForeignKeyReference(string value)
+        {
+            var parts = value.Split('.');
+            if (parts.Length != 2)
+            {
+                return false;
+            }
+            return !string.IsNullOrWhiteSpace(parts[0]) && !string.IsNullOrWhiteSpace(parts[1]);
         }
 
         private static bool IsDigits(string text)
@@ -931,6 +1199,21 @@ namespace DbChronicle.Parsing
         {
             var attribute = element.Attribute(name);
             return attribute == null ? null : attribute.Value;
+        }
+
+        private static long? LongAttr(XElement element, string name)
+        {
+            var text = Attr(element, name);
+            if (string.IsNullOrEmpty(text))
+            {
+                return null;
+            }
+            long value;
+            if (long.TryParse(text, NumberStyles.Integer, CultureInfo.InvariantCulture, out value))
+            {
+                return value;
+            }
+            return null;
         }
 
         private static bool? BoolAttr(XElement element, string name)

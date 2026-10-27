@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <RootNamespace>DbChronicle.Scanner.Languages</RootNamespace>
+    <AssemblyName>DbChronicle.Scanner.Languages</AssemblyName>
+    <PackageId>DbChronicle.Scanner.Languages</PackageId>
+    <Version>1.0.0</Version>
+    <Description>DbChronicle 的多语言实体扫描器（Java / Go / TypeScript）：轻量源码解析，零第三方依赖</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\DbChronicle\DbChronicle.csproj" />
+  </ItemGroup>
+
+</Project>

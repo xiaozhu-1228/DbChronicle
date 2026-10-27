@@ -17,14 +17,12 @@
 
   <ItemGroup>
     <ProjectReference Include="..\DbChronicle\DbChronicle.csproj" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <!-- 数据库驱动只属于 CLI（SQL 执行工具），核心库不引用 -->
-    <PackageReference Include="MySqlConnector" Version="2.3.7" />
-    <PackageReference Include="Npgsql" Version="6.0.9" />
-    <PackageReference Include="Microsoft.Data.SqlClient" Version="5.1.5" />
-    <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.10" />
+    <!-- 数据库驱动在独立执行器库，核心库保持零第三方依赖；CLI 只是它的一个消费者 -->
+    <ProjectReference Include="..\DbChronicle.Executor.AdoNet\DbChronicle.Executor.AdoNet.csproj" />
+    <!-- Roslyn 源码扫描（scan 命令的 source 参数）按需引用 -->
+    <ProjectReference Include="..\DbChronicle.Scanner.Source\DbChronicle.Scanner.Source.csproj" />
+    <!-- Java / Go / TypeScript 源码扫描 -->
+    <ProjectReference Include="..\DbChronicle.Scanner.Languages\DbChronicle.Scanner.Languages.csproj" />
   </ItemGroup>
 
 </Project>

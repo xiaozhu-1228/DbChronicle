@@ -17,8 +17,18 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\DbChronicle\DbChronicle.csproj" />
-    <!-- 集成测试需要真实执行能力，ADO 实现在 CLI 内 -->
-    <ProjectReference Include="..\..\DbChronicle.Cli\DbChronicle.Cli.csproj" />
+    <!-- 集成测试需要真实执行能力，ADO 实现在独立执行器库 -->
+    <ProjectReference Include="..\..\DbChronicle.Executor.AdoNet\DbChronicle.Executor.AdoNet.csproj" />
+    <!-- EF Core 执行器：构造层面验证（真库用例由宿主提供 provider） -->
+    <ProjectReference Include="..\..\DbChronicle.Executor.EfCore\DbChronicle.Executor.EfCore.csproj" />
+    <!-- Roslyn 源码扫描 -->
+    <ProjectReference Include="..\..\DbChronicle.Scanner.Source\DbChronicle.Scanner.Source.csproj" />
+    <!-- Java / Go / TypeScript 源码扫描 -->
+    <ProjectReference Include="..\..\DbChronicle.Scanner.Languages\DbChronicle.Scanner.Languages.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="6.0.0" />
   </ItemGroup>
 
 </Project>
