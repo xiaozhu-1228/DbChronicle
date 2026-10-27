@@ -27,9 +27,7 @@ namespace DbChronicle.IntegrationTests
                 "  <table name=\"t1\" action=\"CREATE\">\n"
                 + "    <column name=\"id\" action=\"ADD\" type=\"Int64\" primaryKey=\"true\" autoIncrement=\"true\" nullable=\"false\"/>\n"
                 + "  </table>\n"
-                + "  <table name=\"t2\" action=\"ALTER\">\n"
-                + "    <rawSql><sql dialect=\"sqlite\">THIS IS NOT VALID SQL</sql></rawSql>\n"
-                + "  </table>");
+                + "  <rawSql name=\"t2\">THIS IS NOT VALID SQL</rawSql>");
 
             var units = new ChangeUnitLoader(config).LoadAll();
             var dbPath = Path.Combine(directory, "table-commit.db");
@@ -75,9 +73,7 @@ namespace DbChronicle.IntegrationTests
                 + "  <table name=\"b2\" action=\"CREATE\">\n"
                 + "    <column name=\"id\" action=\"ADD\" type=\"Int64\" primaryKey=\"true\" autoIncrement=\"true\" nullable=\"false\"/>\n"
                 + "  </table>\n"
-                + "  <table name=\"b3\" action=\"ALTER\">\n"
-                + "    <rawSql><sql dialect=\"sqlite\">NOT VALID SQL</sql></rawSql>\n"
-                + "  </table>");
+                + "  <rawSql name=\"b3\">NOT VALID SQL</rawSql>");
 
             var units = new ChangeUnitLoader(config).LoadAll();
             var dbPath = Path.Combine(directory, "batch-commit.db");
@@ -109,9 +105,7 @@ namespace DbChronicle.IntegrationTests
                 "  <table name=\"u1\" action=\"CREATE\">\n"
                 + "    <column name=\"id\" action=\"ADD\" type=\"Int64\" primaryKey=\"true\" autoIncrement=\"true\" nullable=\"false\"/>\n"
                 + "  </table>\n"
-                + "  <table name=\"u2\" action=\"ALTER\">\n"
-                + "    <rawSql><sql dialect=\"sqlite\">NOT VALID SQL</sql></rawSql>\n"
-                + "  </table>");
+                + "  <rawSql name=\"u2\">NOT VALID SQL</rawSql>");
 
             var units = new ChangeUnitLoader(config).LoadAll();
             var dbPath = Path.Combine(directory, "unit-commit.db");
@@ -135,9 +129,7 @@ namespace DbChronicle.IntegrationTests
                 "  <table name=\"e1\" action=\"CREATE\">\n"
                 + "    <column name=\"id\" action=\"ADD\" type=\"Int64\" primaryKey=\"true\" autoIncrement=\"true\" nullable=\"false\"/>\n"
                 + "  </table>\n"
-                + "  <table name=\"e2\" action=\"ALTER\">\n"
-                + "    <rawSql><sql dialect=\"sqlite\">NOT VALID SQL</sql></rawSql>\n"
-                + "  </table>");
+                + "  <rawSql name=\"e2\">NOT VALID SQL</rawSql>");
 
             var units = new ChangeUnitLoader(config).LoadAll();
             var dbPath = Path.Combine(directory, "no-transaction.db");
@@ -171,9 +163,7 @@ namespace DbChronicle.IntegrationTests
                 "  <table name=\"c1\" action=\"CREATE\">\n"
                 + "    <column name=\"id\" action=\"ADD\" type=\"Int64\" primaryKey=\"true\" autoIncrement=\"true\" nullable=\"false\"/>\n"
                 + "  </table>\n"
-                + "  <table name=\"c2\" action=\"ALTER\">\n"
-                + "    <rawSql><sql dialect=\"sqlite\">NOT VALID SQL</sql></rawSql>\n"
-                + "  </table>");
+                + "  <rawSql name=\"c2\">NOT VALID SQL</rawSql>");
 
             var units = new ChangeUnitLoader(config).LoadAll();
             var dbPath = Path.Combine(directory, "continue-table.db");
@@ -201,9 +191,7 @@ namespace DbChronicle.IntegrationTests
             config.Options.CommitScope = "table";
 
             TestSupport.WriteUnit(directory, "20261023_140000_ee0005",
-                "  <table name=\"d1\" action=\"ALTER\">\n"
-                + "    <rawSql><sql dialect=\"sqlite\">NOT VALID SQL</sql></rawSql>\n"
-                + "  </table>");
+                "  <rawSql name=\"d1\">NOT VALID SQL</rawSql>");
 
             TestSupport.WriteUnit(directory, "20261023_140100_ff0006",
                 "  <table name=\"d2\" action=\"CREATE\">\n"

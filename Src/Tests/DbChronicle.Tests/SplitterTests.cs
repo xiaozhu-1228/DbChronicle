@@ -144,10 +144,7 @@ namespace DbChronicle.Tests
         public void Split_ShouldReportSplitErrorAsDiagnostic()
         {
             var unit = TestSupport.ParseSingle(
-                "  <table name=\"t\" action=\"ALTER\">\n"
-                + "    <column name=\"c\" action=\"ADD\" type=\"Int32\" nullable=\"true\"/>\n"
-                + "    <rawSql><sql dialect=\"mysql\">SELECT 'abc</sql></rawSql>\n"
-                + "  </table>");
+                "  <rawSql>SELECT 'abc</rawSql>");
 
             var result = TestSupport.CompileWith("mysql", unit, false, null);
             Assert.True(result.HasErrors);

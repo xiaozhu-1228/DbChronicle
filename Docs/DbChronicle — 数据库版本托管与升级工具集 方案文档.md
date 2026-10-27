@@ -995,6 +995,7 @@ API 与 CLI `new` 命令共享同一套命名逻辑，保证文件名规范一�
 | **`release`**   | **是** | **所属发布版本，格式 `yyyyMMdd`** |
 | `<description>` | 是     | 人类可读的变更说明                |
 | `<depends>`     | 否     | 显式声明依赖的变更单元 id         |
+| `<rawSql>`      | 否     | 直接写 SQL 文本，原样执行、不做分析、不区分方言（见 4.5.8） |
 
 **`release` 约束：**
 
@@ -1021,6 +1022,8 @@ API 与 CLI `new` 命令共享同一套命名逻辑，保证文件名规范一�
   <seed .../>
 </table>
 ```
+
+> 表节点内只接受结构化子节点（`column` / `index` / `foreignKey` / `primaryKey` / `uniqueConstraint` / `checkConstraint` / `defaultConstraint` / `dataMigration` / `seed` / `update` / `delete` / `clean` / `backfill` / `constraintComment`）；**不接受 `<rawSql>`**——原始 SQL 只能作为 `<changeUnit>` 的直接子节点（见 4.5.8），写在表内按未知节点忽略并告警 **W020**。
 
 | 属性      | 取值                                                           | 说明                                             |
 | --------- | -------------------------------------------------------------- | ------------------------------------------------ |
@@ -1237,9 +1240,49 @@ API 与 CLI `new` 命令共享同一套命名逻辑，保证文件名规范一�
 
 **冲突目标（主键）来源**：PG / SQLite 的 `ON CONFLICT` 需要冲突目标列，取累积模型中该表的主键列；拿不到（无基线、该表不在变更链中）或 SQLite 版本低于 3.24 时，降级为普通 `INSERT` 并输出 `W029`。MySQL 的 `ON DUPLICATE KEY` 不依赖显式目标，任何唯一键冲突都会更新。
 
-#### 4.5.8 视图 / 序列 / 触发器 / 存储过程
+#### 4.5.8 视图 / 序列 / 触发器 / 存储过程 / 原始 SQL
 
-用 `<rawSql>` 节点按方言写完整 SQL。
+视图与序列已结构化（见 4.1.9）；触发器 / 存储过程 / 函数，以及任何"只能用 SQL 表达"的变更，用 `<rawSql>` 直接写。
+
+**原始 SQL：`<rawSql>`**（与逻辑模型并存，内容原样透传）
+
+`<changeUnit>` 下直接写 `<rawSql>` 节点，**节点内容就是 SQL 文本**：
+
+```xml
+<changeUnit id="20261027_100000_a1b2c3" author="zhangsan" release="20261027">
+  <description>回填 + 手工修复</description>
+
+  <table name="nor_user" action="ALTER">
+    <column name="phone" action="ADD" type="String" length="20" nullable="true"/>
+  </table>
+
+  <rawSql><![CDATA[
+UPDATE nor_user SET phone = '00000000' WHERE phone IS NULL;
+INSERT INTO nor_sys_log (msg) VALUES ('migrated by 1.2.0');
+]]></rawSql>
+</changeUnit>
+```
+
+| 项 | 规则 |
+| --- | --- |
+| 语法 | `<rawSql>…</rawSql>`，直接文本；含 `<` `>` `&` 或长脚本时用 CDATA |
+| 是否分析 | **不分析**——不解析表名、不校验语法、不推断类型；由数据库在执行期判定对错 |
+| 是否分方言 | **不区分方言，也不提供 `dialect` 属性**（原因见下） |
+| 位置 | **只能作为 `<changeUnit>` 的直接子节点**；写在 `<table>` 内按未知节点忽略并告警 W020（逻辑模型内不混写原始 SQL） |
+| 表归属 | 可选 `name="表名"`，仅用于分组与日志，不影响执行 |
+| 多语句 | 允许。编译期只按方言分隔符**文本拆分**成多条语句，不做语义处理 |
+| 执行顺序 | 排在全部结构化操作之后（与其他 rawSql 同组，组内按声明顺序） |
+| 幂等性 | 原样执行，**不保证幂等**——重复执行由 SQL 自身负责（如 `WHERE NOT EXISTS`） |
+| 回滚 | 视为不可逆操作，`rollback` 时标记为 blocker，需人工处理 |
+| 空内容 | 解析失败（**E051**） |
+
+**为什么 `rawSql` 不需要 `dialect` 属性：**
+
+1. **方言在启动配置里已经确定**：`DbChronicleConfig` 的 `database.dialect`（+ `version`）就是唯一目标方言，编译期不存在"多方言待选"的情形；
+2. **纯 SQL 不需要按方言分化**：编译器对 `<rawSql>` 内容不做任何解析、校验、改写，标了 `dialect` 也只是原样输出，标识没有任何作用；
+3. **确实需要按库写不同 SQL 时**：拆成不同 release 的变更单元（不同环境部署不同单元）即可，不需要在单文件里分方言。
+
+> 历史兼容：`<rawSql><sql dialect="mysql">…</sql></rawSql>` 这种旧写法仍能解析（按方言存入字典），但新写的变更单元一律推荐直接写文本。若旧写法缺当前方言，仍会输出 W032。
 
 #### 4.5.9 完整示例
 
@@ -1329,7 +1372,7 @@ API 与 CLI `new` 命令共享同一套命名逻辑，保证文件名规范一�
 | `MODIFY` 在 full 模式下未声明 `defaultValue`（= 目标无默认值）           | 警告（W008）                        |
 | `foreignKey` 格式必须为 `表名.列名`                                      | 解析失败                            |
 | 同一 `changeUnit` 内，同一表同一列不得重复出现                           | 解析失败                            |
-| `RawSql` 的 `dialect` 必须与当前方言匹配                                 | 编译时跳过不匹配项                  |
+| `rawSql` 直接写文本时不区分方言；旧写法（子 `<sql dialect>`）缺当前方言   | 编译时跳过 + 警告（W032）           |
 | `DROP_TABLE` / `DROP_COLUMN` 必须有显式 `allowDestructive` 配置          | 解析失败                            |
 | `unsigned=true` 仅对整数类型有效                                         | 解析失败                            |
 | `onUpdate` 仅对 `DateTime` / `DateTimeOffset` 类型有效                   | 解析失败                            |
@@ -1344,6 +1387,7 @@ API 与 CLI `new` 命令共享同一套命名逻辑，保证文件名规范一�
 | `<sequence>` 必须提供 `name`                                             | 解析失败（E049）                    |
 | `<constraintComment>` 必须提供 `name`                                    | 解析失败（E043）                    |
 | `<table action="ENGINE/CHARSET/TABLESPACE">` 至少给一个选项值            | 解析失败（E050）                    |
+| `<rawSql>` 内容不得为空                                                  | 解析失败（E051）                    |
 
 #### 4.5.11 MVP 范围建议
 
@@ -1600,7 +1644,7 @@ API 与 CLI `new` 命令共享同一套命名逻辑，保证文件名规范一�
 1. **一次模型、多库编译前先查 4.7.1**：报错类问题在 `compile --all-dialects` 阶段就会暴露，不会带到生产。
 2. **跨库项目把 4.7.2 当评审清单**：每一行都是"能跑但行为不同"，需业务方确认可接受，或在模型里用等价写法规避（如 PG 的 `unsigned` 用 `<checkConstraint>` 补 `>= 0`）。
 3. **CI 用 `check --strict-warnings`**：把降级警告升级为失败，从源头拦住"填了但实际不生效"的变更。
-4. **4.7.3 的能力统一走 `<rawSql>`**，并按方言逐一提供 `<sql dialect="...">`，缺哪个方言会收到 W032 提醒。
+4. **4.7.3 的能力统一走 `<rawSql>`**：直接把 SQL 文本写在节点里，不区分方言（见 4.5.8）；需要按库差异化时拆成不同 release 的变更单元。
 
 ---
 
@@ -4067,7 +4111,7 @@ CI 流水线调用 `DbChronicle.Cli` 工具，连接信息通过 Secrets 注入�
 | status 基线未应用         | 显示 pending + 提示                      | 首次接入体验清晰                                                                           |
 | **变更单元生成时机**      | 开发阶段，非编译阶段                     | 和 `dotnet new`、`dotnet ef migrations add` 一致                                           |
 | **C# 宿主项目的生成方式** | 仍用 CLI `new` 命令                      | CLI 是全局 dotnet tool，IDE 终端直接调用                                                   |
-| **编程式生成**            | Core 库公开 `ChangeUnitFactory.Create()` | 供 CI、内部工具使用                                                              |
+| **编程式生成**            | Core 库公开 `ChangeUnitFactory.Create()` | 供 CI、内部工具使用                                                                        |
 | **编译时校验**            | Pre-commit 钩子 + CI `check` 门禁        | 比 MSBuild Target 更早、更轻量                                                             |
 | **IDE 插件**              | 未提供                                   | 编辑器内直接调用 CLI 即可，非必须                                                          |
 
@@ -4345,15 +4389,15 @@ Test/
 
 **已于本轮交付（原 16.4 列出）**：
 
-| 项                                   | 交付形态                                                                                |
-| ------------------------------------ | --------------------------------------------------------------------------------------- |
-| `Scanner.Database`（数据库反向工程） | 核心库 `Scanner/Database/`（5 方言 reader），CLI `scan-db`                              |
-| `CodeGen.*`（XML → 实体）            | 核心库 `CodeGen/`（C# / Java / Go / TypeScript），CLI `codegen`                         |
-| `Executor.EfCore`                    | 独立工程 `DbChronicle.Executor.EfCore`（复用宿主 `DbContext`）                          |
-| `scan --source`（Roslyn）            | 独立工程 `DbChronicle.Scanner.Source`，CLI `scan --source --lang csharp`                |
-| `Scanner.Java` / `Go` / `TypeScript` | 独立工程 `DbChronicle.Scanner.Languages`，CLI `scan --source --lang java                |
-| IDE 插件                             | 未提供：编辑器内直接调用 CLI（`db-chronicle new --desc "..."`）                          |
-| SQL Server 表/列/索引/约束注释       | `sp_addextendedproperty` / `sp_updateextendedproperty` 自动 upsert                      |
+| 项                                   | 交付形态                                                                 |
+| ------------------------------------ | ------------------------------------------------------------------------ |
+| `Scanner.Database`（数据库反向工程） | 核心库 `Scanner/Database/`（5 方言 reader），CLI `scan-db`               |
+| `CodeGen.*`（XML → 实体）            | 核心库 `CodeGen/`（C# / Java / Go / TypeScript），CLI `codegen`          |
+| `Executor.EfCore`                    | 独立工程 `DbChronicle.Executor.EfCore`（复用宿主 `DbContext`）           |
+| `scan --source`（Roslyn）            | 独立工程 `DbChronicle.Scanner.Source`，CLI `scan --source --lang csharp` |
+| `Scanner.Java` / `Go` / `TypeScript` | 独立工程 `DbChronicle.Scanner.Languages`，CLI `scan --source --lang java |
+| IDE 插件                             | 未提供：编辑器内直接调用 CLI（`db-chronicle new --desc "..."`）          |
+| SQL Server 表/列/索引/约束注释       | `sp_addextendedproperty` / `sp_updateextendedproperty` 自动 upsert       |
 
 ### 16.5 测试现状
 

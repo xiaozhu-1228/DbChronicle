@@ -82,9 +82,9 @@ namespace DbChronicle.Parsing
 
             foreach (var rawSql in root.Elements("rawSql"))
             {
-                var operation = new RawSqlOperation();
-                ReadDialectSql(rawSql, operation.SqlByDialect);
-                operation.Stage = ParseStage(unit, rawSql, null, null);
+                var operation = new RawSqlOperation { Table = Attr(rawSql, "name") };
+                ReadRawSql(unit, rawSql, operation);
+                operation.Stage = ParseStage(unit, rawSql, operation.Table, null);
                 unit.Operations.Add(operation);
             }
 
@@ -549,16 +549,6 @@ namespace DbChronicle.Parsing
                     unit.Operations.Add(backfill);
                     break;
 
-                case "rawSql":
-                    var raw = new RawSqlOperation
-                    {
-                        Table = tableName,
-                        Stage = ParseStage(unit, element, tableName, null)
-                    };
-                    ReadDialectSql(element, raw.SqlByDialect);
-                    unit.Operations.Add(raw);
-                    break;
-
                 default:
                     unit.Diagnostics.Add(CompileDiagnostic.Warning("W020", "忽略未知节点 <" + element.Name.LocalName + ">（表 " + tableName + "）"));
                     break;
@@ -975,6 +965,35 @@ namespace DbChronicle.Parsing
                     Message = "文件使用 CRLF 换行，不符合约定（会导致 checksum 漂移）"
                 });
             }
+        }
+
+        /// <summary>
+        /// 读取 &lt;rawSql&gt; 的内容。**推荐写法是把 SQL 直接写在节点里**（支持 CDATA）：
+        /// 不做任何分析、也不区分方言——方言由启动配置决定，纯 SQL 不需要按方言分化。
+        /// 兼容旧写法 &lt;rawSql&gt;&lt;sql dialect="x"&gt;…&lt;/sql&gt;&lt;/rawSql&gt;（方言字典保留，但不再推荐）。
+        /// </summary>
+        private void ReadRawSql(ChangeUnit unit, XElement element, RawSqlOperation operation)
+        {
+            if (element.Elements("sql").Any())
+            {
+                ReadDialectSql(element, operation.SqlByDialect);
+                if (operation.SqlByDialect.Count == 0)
+                {
+                    AddError(unit, DiagnosticCodes.RawSqlEmpty, operation.Table, null,
+                        "<rawSql> 内容为空：请直接写 SQL 文本（长脚本建议用 CDATA）");
+                }
+                return;
+            }
+
+            var text = element.Value.Trim();
+            if (string.IsNullOrEmpty(text))
+            {
+                AddError(unit, DiagnosticCodes.RawSqlEmpty, operation.Table, null,
+                    "<rawSql> 内容为空：请直接写 SQL 文本（长脚本建议用 CDATA）");
+                return;
+            }
+
+            operation.SqlByDialect["any"] = text;
         }
 
         private static void ReadDialectSql(XElement element, Dictionary<string, string> target)

@@ -112,7 +112,7 @@ namespace DbChronicle.IntegrationTests
 
             // 生成的 XML 能被解析器接受，且列属性保真
             var unit = TestSupport.ParseXml(xml);
-            Assert.Empty(unit.Diagnostics.Where(x => x.Code.StartsWith("E0")));
+            Assert.DoesNotContain(unit.Diagnostics, x => x.Code.StartsWith("E0"));
 
             var creates = unit.Operations.OfType<DbChronicle.Models.Operations.CreateTableOperation>().ToList();
             Assert.Equal(2, creates.Count);

@@ -34,5 +34,6 @@ namespace DbChronicle.Diagnostics
         public const string TableOptionUnsupported = "E047";
         public const string StatementSplitFailed = "E042";
         public const string WildcardUnsupported = "E041";
+        public const string RawSqlEmpty = "E051";
     }
 }

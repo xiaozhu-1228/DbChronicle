@@ -72,8 +72,8 @@ namespace DbChronicle.IntegrationTests
             TestSupport.WriteUnit(directory, "20261023_120000_e7f8a9",
                 "  <table name=\"t1\" action=\"ALTER\">\n"
                 + "    <column name=\"c3\" action=\"ADD\" type=\"Int32\" nullable=\"true\"/>\n"
-                + "    <rawSql><sql dialect=\"sqlite\">INSERT INTO t_missing VALUES (1);</sql></rawSql>\n"
-                + "  </table>");
+                + "  </table>\n"
+                + "  <rawSql name=\"t1\">INSERT INTO t_missing VALUES (1);</rawSql>");
 
             var config = CreateConfig(directory);
             var dbPath = Path.Combine(directory, "test.db");
