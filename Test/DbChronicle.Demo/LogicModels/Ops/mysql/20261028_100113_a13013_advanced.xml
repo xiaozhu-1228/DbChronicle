@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<changeUnit id="20261028_100113_a13013" author="ops-test" release="20261028">
+  <description>第 13 类 高级对象：字符集 13.1 / 存储引擎 13.2 / 表空间 13.3 / 分区 13.4 / 权限 13.5 / 同义词 13.6</description>
+
+  <table name="dcops_t13_adv" action="CHARSET" charset="utf8mb4" collate="utf8mb4_unicode_ci"/>
+
+  <table name="dcops_t13_adv" action="ENGINE" engine="InnoDB"/>
+
+  <rawSql name="dcops_t13_ts_create" stage="before"><![CDATA[
+CREATE TABLESPACE dcops_ts ADD DATAFILE 'dcops_ts.ibd' ENGINE=InnoDB
+]]></rawSql>
+
+  <table name="dcops_t13_ts_tbl" action="TABLESPACE" tablespace="dcops_ts"/>
+
+  <rawSql name="dcops_t13_partition" stage="before"><![CDATA[
+ALTER TABLE dcops_t13_adv PARTITION BY HASH(id) PARTITIONS 4
+]]></rawSql>
+
+  <rawSql name="dcops_t13_synonym"><![CDATA[
+CREATE OR REPLACE VIEW dcops_v13_synonym AS SELECT id, payload FROM dcops_t13_adv
+]]></rawSql>
+
+  <rawSql name="dcops_t13_grant"><![CDATA[
+CREATE USER IF NOT EXISTS 'dcops_reader'@'%' IDENTIFIED BY 'DcOps#2026!'
+]]></rawSql>
+
+  <rawSql name="dcops_t13_grant_select"><![CDATA[
+GRANT SELECT ON dcops_t13_adv TO 'dcops_reader'@'%'
+]]></rawSql>
+
+</changeUnit>

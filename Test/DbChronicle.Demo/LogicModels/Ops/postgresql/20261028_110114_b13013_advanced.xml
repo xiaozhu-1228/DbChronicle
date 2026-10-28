@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<changeUnit id="20261028_110114_b13013" author="ops-test" release="20261028">
+  <description>第 13 类 高级对象：表空间 13.3 / 分区 13.4（rawSql）/ 权限 13.5（GRANT/REVOKE CURRENT_USER）/ 同义词 13.6（视图模拟）；ENGINE/CHARSET 见 T13b → E047</description>
+
+  <table name="dcops_t13_adv" action="TABLESPACE" tablespace="dcops_ts"/>
+
+  <rawSql name="dcops_t13_partition"><![CDATA[
+CREATE TABLE dcops_t13_part (id BIGINT NOT NULL, payload VARCHAR(32)) PARTITION BY RANGE (id);
+CREATE TABLE dcops_t13_part_p1 PARTITION OF dcops_t13_part FOR VALUES FROM (0) TO (1000)
+]]></rawSql>
+
+  <rawSql name="dcops_t13_synonym"><![CDATA[
+CREATE OR REPLACE VIEW dcops_v13_synonym AS SELECT id, payload FROM dcops_t13_adv
+]]></rawSql>
+
+  <rawSql name="dcops_t13_role"><![CDATA[
+DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'dcops_grantee') THEN CREATE ROLE dcops_grantee NOLOGIN; END IF; END $$;
+]]></rawSql>
+
+  <rawSql name="dcops_t13_grant"><![CDATA[
+GRANT SELECT ON dcops_t13_adv TO dcops_grantee
+]]></rawSql>
+</changeUnit>

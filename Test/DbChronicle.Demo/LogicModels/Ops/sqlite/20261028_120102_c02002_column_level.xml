@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<changeUnit id="20261028_120102_c02002" author="ops-test" release="20261028">
+  <description>第 2 类 列级操作：ADD / DROP / RENAME / MODIFY（SQLite 走 rebuild）/ COMMENT（W007）/ autoIncrement / charset / unsigned / onUpdate；REORDER 见 T02b → E044</description>
+
+  <table name="dcops_t02_cols" action="ALTER">
+    <column name="c_added" action="ADD" type="String" length="40" nullable="true"/>
+    <column name="legacy_col" action="DROP"/>
+    <column name="c_type" action="MODIFY" type="Int64" nullable="true"/>
+    <column name="c_len" action="MODIFY" type="String" length="128" nullable="true"/>
+    <column name="c_comment" action="COMMENT" type="String" length="32" nullable="true" comment="列注释已改"/>
+    <column name="c_charset" action="MODIFY" type="String" length="32" nullable="true" charset="utf8mb4" collate="utf8mb4_bin"/>
+    <column name="c_unsigned" action="MODIFY" type="Int32" nullable="true" unsigned="true"/>
+    <column name="c_onupdate" action="MODIFY" type="DateTime" nullable="true" onUpdate="CURRENT_TIMESTAMP"/>
+    <column name="c_unique" action="MODIFY" type="String" length="32" nullable="true" unique="true"/>
+  </table>
+
+  <table name="dcops_t02_rename" action="ALTER">
+    <column name="c_new" action="RENAME" renamedFrom="c_old" type="String" length="32" nullable="true"/>
+  </table>
+
+  <table name="dcops_t02_ai" action="ALTER">
+    <column name="id" action="MODIFY" type="Int64" nullable="false" autoIncrement="true"/>
+  </table>
+</changeUnit>

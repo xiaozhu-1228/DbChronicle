@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<changeUnit id="20261028_120111_c10010" author="ops-test" release="20261028">
+  <description>第 10 类 触发器操作：CREATE（rawSql 透传，BEGIN…END 块）/ DROP</description>
+
+  <trigger name="trg_t10_after_insert">
+    <sql dialect="sqlite"><![CDATA[
+CREATE TRIGGER trg_t10_after_insert AFTER INSERT ON dcops_t10_src
+FOR EACH ROW
+BEGIN
+  INSERT INTO dcops_t10_log (msg) VALUES ('inserted:' || NEW.id);
+END
+]]></sql>
+  </trigger>
+
+  <rawSql name="dcops_t10_src"><![CDATA[
+DROP TRIGGER IF EXISTS trg_t10_legacy
+]]></rawSql>
+</changeUnit>

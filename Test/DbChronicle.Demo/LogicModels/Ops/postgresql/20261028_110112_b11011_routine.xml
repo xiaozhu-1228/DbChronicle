@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<changeUnit id="20261028_110112_b11011" author="ops-test" release="20261028">
+  <description>第 11 类 存储过程/函数：CREATE OR REPLACE FUNCTION + PROCEDURE / DROP</description>
+
+  <function name="dcops_f11_echo">
+    <sql dialect="postgresql"><![CDATA[
+CREATE OR REPLACE FUNCTION dcops_f11_echo(v integer) RETURNS integer AS $$
+BEGIN
+  RETURN v * 2;
+END;
+$$ LANGUAGE plpgsql
+]]></sql>
+  </function>
+
+  <procedure name="dcops_p11_noop">
+    <sql dialect="postgresql"><![CDATA[
+CREATE OR REPLACE PROCEDURE dcops_p11_noop() LANGUAGE plpgsql AS $$
+BEGIN
+  RAISE NOTICE 'noop';
+END;
+$$
+]]></sql>
+  </procedure>
+
+  <rawSql name="dcops_f11_legacy"><![CDATA[
+DROP FUNCTION IF EXISTS dcops_f11_legacy()
+]]></rawSql>
+
+  <rawSql name="dcops_p11_legacy"><![CDATA[
+DROP PROCEDURE IF EXISTS dcops_p11_legacy()
+]]></rawSql>
+</changeUnit>

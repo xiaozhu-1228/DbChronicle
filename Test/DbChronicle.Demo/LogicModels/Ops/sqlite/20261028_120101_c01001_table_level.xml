@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<changeUnit id="20261028_120101_c01001" author="ops-test" release="20261028">
+  <description>第 1 类 表级操作：CREATE / DROP / RENAME / COMMENT（W006 跳过）/ REBUILD；ENGINE/CHARSET/TABLESPACE 见 T13b → E047</description>
+
+  <table name="dcops_t01_base" action="CREATE" comment="表级操作-初始注释">
+    <column name="id" action="ADD" type="Int64" primaryKey="true" autoIncrement="true" nullable="false"/>
+    <column name="name" action="ADD" type="String" length="64" nullable="true"/>
+    <column name="amount" action="ADD" type="Decimal" precision="12" scale="2" nullable="false" defaultValue="0"/>
+  </table>
+
+  <table name="dcops_t01_renamed" action="COMMENT" comment="表级操作-已改注释"/>
+
+  <table name="dcops_t01_base" action="RENAME" newName="dcops_t01_renamed"/>
+
+  <table name="dcops_t01_renamed" action="REBUILD"/>
+
+  <table name="dcops_t01_dropped" action="DROP"/>
+</changeUnit>

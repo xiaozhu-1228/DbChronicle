@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<changeUnit id="20261028_110117_b13015" author="ops-test" release="20261028">
+  <description>第 13 类边界：PARTITION / GRANT / SYNONYM 写成 table action 时应报 E012 并提示改用 rawSql</description>
+
+  <table name="dcops_t13_partition" action="GRANT"/>
+</changeUnit>

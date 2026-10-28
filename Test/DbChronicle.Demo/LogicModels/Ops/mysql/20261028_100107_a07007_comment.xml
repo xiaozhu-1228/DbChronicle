@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<changeUnit id="20261028_100107_a07007" author="ops-test" release="20261028">
+  <description>第 7 类 注释操作：表 7.1 / 列 7.2 / 索引 7.3（MySQL 无原生机制，期望 W031）/ 约束 7.4（期望 W031）</description>
+
+  <table name="dcops_t07_comment" action="COMMENT" comment="新表注释"/>
+
+  <table name="dcops_t07_comment" action="ALTER">
+    <column name="phone" action="COMMENT" type="String" length="20" nullable="true" comment="新手机号注释"/>
+    <index name="idx_t07_phone" action="COMMENT" comment="索引注释"/>
+    <constraintComment name="ck_t07_phone" kind="check" comment="约束注释"/>
+  </table>
+</changeUnit>

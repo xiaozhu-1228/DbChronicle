@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<changeUnit id="20261028_100117_a14002" author="ops-test" release="20261028">
+  <description>rawSql 边界：内容为空（只有空白）应报 E051，而不是静默生成空语句</description>
+
+  <rawSql name="dcops_t14_empty"><![CDATA[
+]]></rawSql>
+</changeUnit>

@@ -105,6 +105,13 @@ namespace DbChronicle.Parsing
                 {
                     var operation = new RawSqlOperation { Table = Attr(element, "name") };
                     ReadDialectSql(element, operation.SqlByDialect);
+                    if (operation.SqlByDialect.Count == 0)
+                    {
+                        AddError(unit, DiagnosticCodes.RawSqlEmpty, operation.Table, null,
+                            "<" + name + "> 的 <sql> 子节点内容为空：请直接写 SQL 文本（长脚本建议用 CDATA）");
+                        continue;
+                    }
+
                     operation.Stage = ParseStage(unit, element, Attr(element, "name"), null);
                     unit.Operations.Add(operation);
                 }
@@ -194,6 +201,13 @@ namespace DbChronicle.Parsing
             {
                 var raw = new RawSqlOperation { Table = name };
                 ReadDialectSql(element, raw.SqlByDialect);
+                if (raw.SqlByDialect.Count == 0)
+                {
+                    AddError(unit, DiagnosticCodes.RawSqlEmpty, name, null,
+                        "<sequence> 的 <sql> 子节点内容为空：请直接写 SQL 文本（长脚本建议用 CDATA）");
+                    return;
+                }
+
                 unit.Operations.Add(raw);
                 return;
             }
@@ -658,6 +672,13 @@ namespace DbChronicle.Parsing
                 return null;
             }
 
+            if (action == ColumnAction.Reorder && element.Attribute("before") != null)
+            {
+                AddError(unit, DiagnosticCodes.ColumnReorderBeforeUnsupported, tableName, definition.Name,
+                    "REORDER 不支持 before 属性，请改用 after=\"列名\" 或 after=\"FIRST\"");
+                return null;
+            }
+
             if (action == ColumnAction.Modify)
             {
                 if (_config.Options.IncrementalModify)
@@ -1013,7 +1034,14 @@ namespace DbChronicle.Parsing
                 {
                     dialect = "any";
                 }
-                target[dialect.ToLowerInvariant()] = sql.Value.Trim();
+
+                var text = sql.Value.Trim();
+                if (text.Length == 0)
+                {
+                    continue;
+                }
+
+                target[dialect.ToLowerInvariant()] = text;
             }
         }
 

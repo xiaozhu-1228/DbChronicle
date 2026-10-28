@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<changeUnit id="20261028_120118_c14001" author="ops-test" release="20261028">
+  <description>通用能力 rawSql：推荐写法直接文本 + CDATA 多语句 / 字符串内分号 / 单引号转义 / 行注释 / any 回退 / 缺方言 W032 / stage 属性</description>
+
+  <rawSql name="dcops_t14_raw"><![CDATA[
+CREATE TABLE [dcops_t14_raw] ([id] INTEGER NOT NULL PRIMARY KEY, [note] TEXT NULL);
+INSERT INTO [dcops_t14_raw] ([id], [note]) VALUES (1, 'a;b');
+INSERT INTO [dcops_t14_raw] ([id], [note]) VALUES (2, 'it''s ok');
+-- 行注释里含分号 ; 与关键字 DROP TABLE，不应影响语句拆分
+INSERT INTO [dcops_t14_raw] ([id], [note]) VALUES (3, 'after-comment')
+]]></rawSql>
+
+  <rawSql name="dcops_t14_second"><![CDATA[
+INSERT INTO [dcops_t14_raw] ([id], [note]) VALUES (4, 'any-ok')
+]]></rawSql>
+
+  <rawSql name="dcops_t14_missing">
+    <sql dialect="oracle">UPDATE dcops_t14_raw SET note = 'never' WHERE id = 1</sql>
+  </rawSql>
+
+</changeUnit>

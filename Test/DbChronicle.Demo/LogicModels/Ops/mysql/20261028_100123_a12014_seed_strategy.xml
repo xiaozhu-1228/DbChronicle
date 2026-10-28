@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<changeUnit id="20261028_100123_a12014" author="ops-test" release="20261028">
+  <description>第 12 类 SEED 冲突策略：IGNORE 跳过 / UPDATE 覆盖</description>
+
+  <table name="dcops_t12c_ignore" action="ALTER">
+    <seed table="dcops_t12c_ignore" conflict="IGNORE" columns="id,note">
+      <row values="1,'ignored'"/>
+    </seed>
+  </table>
+
+  <table name="dcops_t12c_update" action="ALTER">
+    <seed table="dcops_t12c_update" conflict="UPDATE" columns="id,note">
+      <row values="1,'updated'"/>
+    </seed>
+  </table>
+</changeUnit>

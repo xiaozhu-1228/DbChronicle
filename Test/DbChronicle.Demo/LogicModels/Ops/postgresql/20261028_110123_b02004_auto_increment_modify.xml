@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<changeUnit id="20261028_110123_b02004" author="ops-test" release="20261028">
+  <description>第 2 类边界：PostgreSQL 不支持把已有列改为 identity，期望编译报 E052 并提示改用 rawSql</description>
+
+  <table name="dcops_t02_ai" action="ALTER">
+    <column name="id" action="MODIFY" type="Int64" nullable="false" autoIncrement="true"/>
+  </table>
+</changeUnit>

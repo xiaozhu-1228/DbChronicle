@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<changeUnit id="20261028_120108_c07007" author="ops-test" release="20261028">
+  <description>第 7 类 注释操作：SQLite 无注释机制，表/列跳过 W006/W007，索引/约束跳过 W031</description>
+
+  <table name="dcops_t07_comment" action="COMMENT" comment="新表注释"/>
+
+  <table name="dcops_t07_comment" action="ALTER">
+    <column name="phone" action="COMMENT" type="String" length="20" nullable="true" comment="新手机号注释"/>
+    <index name="idx_t07_phone" action="COMMENT" comment="索引注释"/>
+    <constraintComment name="ck_t07_phone" kind="check" comment="约束注释"/>
+  </table>
+</changeUnit>

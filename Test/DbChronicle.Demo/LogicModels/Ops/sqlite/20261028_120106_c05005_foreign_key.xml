@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<changeUnit id="20261028_120106_c05005" author="ops-test" release="20261028">
+  <description>第 5 类 外键操作：ADD / DROP / MODIFY 级联规则（SQLite 外键只能建表声明，编译器走 rebuild）</description>
+
+  <table name="dcops_t05_add" action="ALTER">
+    <foreignKey name="fk_t05_new" action="ADD" columns="parent_id"
+                refTable="dcops_t05_parent" refColumns="id"
+                onDelete="CASCADE" onUpdate="RESTRICT"/>
+  </table>
+
+  <table name="dcops_t05_drop" action="ALTER">
+    <foreignKey name="fk_t05_legacy" action="DROP"/>
+  </table>
+
+  <table name="dcops_t05_mod" action="ALTER">
+    <foreignKey name="fk_t05_mod" action="MODIFY" columns="parent_id"
+                refTable="dcops_t05_parent" refColumns="id"
+                onDelete="SET NULL" onUpdate="CASCADE"/>
+  </table>
+</changeUnit>

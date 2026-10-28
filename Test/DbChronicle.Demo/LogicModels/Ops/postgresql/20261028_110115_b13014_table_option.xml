@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<changeUnit id="20261028_110115_b13014" author="ops-test" release="20261028">
+  <description>第 13 类边界：PostgreSQL 不支持 ENGINE / CHARSET，期望编译报 E047</description>
+
+  <table name="dcops_t13_engine" action="ENGINE" engine="InnoDB" charset="utf8mb4" collate="utf8mb4_general_ci"/>
+</changeUnit>

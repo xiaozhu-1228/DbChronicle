@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<changeUnit id="20261028_120115_c13014" author="ops-test" release="20261028">
+  <description>第 13 类边界：SQLite 不支持 ENGINE / CHARSET / TABLESPACE，期望编译报 E047</description>
+
+  <table name="dcops_t13_engine" action="ENGINE" engine="InnoDB" charset="utf8mb4"/>
+
+  <table name="dcops_t13_tablespace" action="TABLESPACE" tablespace="data_ts"/>
+</changeUnit>

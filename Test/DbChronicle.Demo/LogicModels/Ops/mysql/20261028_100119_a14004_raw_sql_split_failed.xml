@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<changeUnit id="20261028_100119_a14004" author="ops-test" release="20261028">
+  <description>rawSql 边界：语句拆分失败（未闭合的单引号）应报 E042，而不是把坏 SQL 送到数据库</description>
+
+  <rawSql name="dcops_t14d"><![CDATA[
+SELECT 'unclosed string
+]]></rawSql>
+</changeUnit>

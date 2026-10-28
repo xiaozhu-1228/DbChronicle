@@ -343,6 +343,10 @@ namespace DbChronicle.Compilation.Dialects
                 stringBuilder.Append(" IDENTITY(1,1)");
             }
             stringBuilder.Append(column.Nullable.GetValueOrDefault() ? " NULL" : " NOT NULL");
+            if (column.Unique.GetValueOrDefault())
+            {
+                stringBuilder.Append(" UNIQUE");
+            }
             DefaultValueSpec defaultValueSpec = column.DefaultValue ?? DefaultValueSpec.Undeclared;
             if (inlineDefault && defaultValueSpec.IsDeclared && !defaultValueSpec.IsNone && !column.AutoIncrement.GetValueOrDefault())
             {

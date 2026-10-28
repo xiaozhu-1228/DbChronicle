@@ -347,6 +347,10 @@ namespace DbChronicle.Compilation.Compiler
             {
                 return -1000;
             }
+            if (operation is RawSqlOperation rawSqlOperation)
+            {
+                return (rawSqlOperation.Stage != 0) ? 50 : 0;
+            }
             if (operation is DataMigrationOperation dataMigrationOperation)
             {
                 return (dataMigrationOperation.Stage != 0) ? 40 : 0;
@@ -589,9 +593,14 @@ namespace DbChronicle.Compilation.Compiler
                 case ColumnAction.Add:
                     return _dialect.AddColumn(operation2);
                 case ColumnAction.Modify:
-                    if (!_options.IncrementalModify && !columnDefinition.DefaultValue.IsDeclared)
+                    var previousDefault = operation.PreviousDefinition == null
+                        ? null
+                        : (operation.PreviousDefinition.DefaultValue ?? DefaultValueSpec.Undeclared);
+                    if (previousDefault != null && previousDefault.IsDeclared && !previousDefault.IsNone
+                        && !columnDefinition.DefaultValue.IsDeclared)
                     {
-                        _dialect.Context.Warn("W008", operation.Table, operation.Name, "MODIFY 未声明 defaultValue，生成的列定义将没有默认值");
+                        _dialect.Context.Warn("W008", operation.Table, operation.Name,
+                            "MODIFY 未声明 defaultValue，将删除该列已有的默认值");
                     }
                     return _dialect.ModifyColumn(operation2);
                 case ColumnAction.Drop:

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<changeUnit id="20261028_110122_b14005" author="ops-test" release="20261028">
+  <description>rawSql 的 stage="before" 应排在结构变更之前（编译期顺序断言，不落库）</description>
+
+  <rawSql name="dcops_t14e_before" stage="before"><![CDATA[
+SELECT 'BEFORE_MARKER'
+]]></rawSql>
+
+  <table name="dcops_t14e_tbl" action="CREATE">
+    <column name="id" action="ADD" type="Int64" primaryKey="true" nullable="false"/>
+  </table>
+</changeUnit>

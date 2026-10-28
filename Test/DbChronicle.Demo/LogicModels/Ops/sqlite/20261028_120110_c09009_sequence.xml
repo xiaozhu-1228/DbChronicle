@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<changeUnit id="20261028_120110_c09009" author="ops-test" release="20261028">
+  <description>第 9 类 序列操作：SQLite 无原生序列，期望编译报 E046（能力边界）</description>
+
+  <sequence name="seq_t09_order" action="CREATE" start="1000" increment="1"/>
+</changeUnit>

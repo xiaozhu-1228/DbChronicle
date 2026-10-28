@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<changeUnit id="20261028_100106_a06006" author="ops-test" release="20261028">
+  <description>第 6 类 约束操作：唯一 ADD/DROP 6.1-6.2 / 检查 ADD 6.3 + DROP 6.4（另一表隔离 5.7 语法失败）/ 默认值 ADD/DROP 6.5-6.6</description>
+
+  <table name="dcops_t06_cons" action="ALTER">
+    <uniqueConstraint name="uk_t06_new" action="ADD" columns="code,age"/>
+    <uniqueConstraint name="uk_t06_legacy" action="DROP"/>
+
+    <checkConstraint name="ck_t06_age" action="ADD" expression="age IS NULL OR (age &gt;= 0 AND age &lt;= 150)"/>
+
+    <defaultConstraint name="df_t06_status" action="ADD" column="status" value="0"/>
+    <defaultConstraint name="df_t06_legacy" action="DROP" column="status"/>
+  </table>
+
+  <table name="dcops_t06_check" action="ALTER">
+    <checkConstraint name="ck_t06_legacy" action="DROP"/>
+  </table>
+</changeUnit>

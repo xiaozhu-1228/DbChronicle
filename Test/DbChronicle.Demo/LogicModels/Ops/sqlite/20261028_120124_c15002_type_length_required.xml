@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<changeUnit id="20261028_120124_c15002" author="ops-test" release="20261028">
+  <description>第 2 类边界：String 缺 length 应报 E018</description>
+
+  <table name="dcops_t15b_bad" action="CREATE">
+    <column name="c_bad" action="ADD" type="String" nullable="true"/>
+  </table>
+</changeUnit>

@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<changeUnit id="20261028_110104_b03003" author="ops-test" release="20261028">
+  <description>第 3 类 主键操作：ADD 3.1 / DROP 3.2 / REPLACE 3.3（PostgreSQL 用约束名）</description>
+
+  <table name="dcops_t03_add" action="ALTER">
+    <primaryKey action="ADD" name="pk_t03_add" columns="id"/>
+  </table>
+
+  <table name="dcops_t03_drop" action="ALTER">
+    <primaryKey action="DROP" name="dcops_t03_drop_pkey"/>
+  </table>
+
+  <table name="dcops_t03_replace" action="ALTER">
+    <primaryKey action="REPLACE" name="dcops_t03_replace_pkey" columns="code"/>
+  </table>
+</changeUnit>

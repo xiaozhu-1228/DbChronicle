@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<changeUnit id="20261028_110109_b08008" author="ops-test" release="20261028">
+  <description>第 8 类 视图操作：CREATE / REPLACE（PostgreSQL 只能增加列）/ 列清单 columns / &lt;sql&gt; 透传回退 / DROP</description>
+
+  <view name="dcops_v08_summary" action="CREATE">
+    <select>SELECT id FROM dcops_t08_src</select>
+  </view>
+
+  <view name="dcops_v08_summary" action="REPLACE">
+    <select>SELECT id, name FROM dcops_t08_src</select>
+  </view>
+
+  <view name="dcops_v08_columns" action="CREATE" columns="key_id, label">
+    <select>SELECT id, name FROM dcops_t08_src</select>
+  </view>
+
+  <view name="dcops_v08_passthrough">
+    <sql dialect="postgresql"><![CDATA[
+CREATE OR REPLACE VIEW dcops_v08_passthrough AS SELECT id FROM dcops_t08_src
+]]></sql>
+  </view>
+
+  <view name="dcops_v08_legacy" action="DROP"/>
+</changeUnit>

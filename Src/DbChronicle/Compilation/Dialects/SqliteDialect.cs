@@ -464,6 +464,10 @@ namespace DbChronicle.Compilation.Dialects
             {
                 stringBuilder.Append(" NOT NULL");
             }
+            if (column.Unique.GetValueOrDefault())
+            {
+                stringBuilder.Append(" UNIQUE");
+            }
             DefaultValueSpec defaultValueSpec = column.DefaultValue ?? DefaultValueSpec.Undeclared;
             if (defaultValueSpec.IsDeclared && !defaultValueSpec.IsNone)
             {

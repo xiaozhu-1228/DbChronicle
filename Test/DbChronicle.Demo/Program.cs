@@ -1,18 +1,16 @@
 using System.Text;
+using System.Linq;
 using System;
 
 using DbChronicle.Demo.Infrastructure;
+using DbChronicle.Demo.OperationTests;
 using DbChronicle.Demo.Scenarios;
 
 namespace DbChronicle.Demo
 {
     internal static class Program
     {
-        /// <summary>
-        /// 方言完全取自 DbchronicleConfig.xml 的 &lt;database dialect="..."&gt;，
-        /// 连接串只决定连哪个库（对应方言的环境变量）。无需任何命令行参数。
-        /// </summary>
-        private static int Main()
+        private static int Main(string[] args)
         {
             try
             {
@@ -20,22 +18,37 @@ namespace DbChronicle.Demo
                 var console = ConsoleReporter.Console;
                 var config = DemoConfig.Load(console);
 
-                switch ((config.Database.Dialect ?? "").Trim().ToLowerInvariant())
+                if (args.Length == 0)
                 {
-                    case "mysql":
-                    case "mariadb":
-                        new MySqlMigrationScenario(console, config).Run();
-                        return 0;
-
-                    case "postgresql":
-                        new PostgreSqlScenario(console, config).Run();
-                        return 0;
-
-                    default:
-                        console.Line("配置文件里的 dialect 不是 Demo 支持的方言：" + config.Database.Dialect
-                            + "（当前支持 mysql / postgresql，请在 Config/DbchronicleConfig.xml 中修改）");
-                        return 1;
+                    return new OperationTestRunner(console, config).Run(Array.Empty<string>());
                 }
+
+                if (string.Equals(args[0], "ops", StringComparison.OrdinalIgnoreCase))
+                {
+                    return new OperationTestRunner(console, config).Run(args.Skip(1).ToArray());
+                }
+
+                if (string.Equals(args[0], "demo", StringComparison.OrdinalIgnoreCase))
+                {
+                    switch ((config.Database.Dialect ?? "").Trim().ToLowerInvariant())
+                    {
+                        case "mysql":
+                        case "mariadb":
+                            return new MySqlMigrationScenario(console, config).Run() ? 0 : 1;
+
+                        case "postgresql":
+                            return new PostgreSqlScenario(console, config).Run() ? 0 : 1;
+
+                        default:
+                            console.Line("配置文件里的 dialect 不是 Demo 支持的方言：" + config.Database.Dialect
+                                + "（当前支持 mysql / postgresql，请在 Config/DbchronicleConfig.xml 中修改）");
+                            return 1;
+                    }
+                }
+
+                console.Line("未知参数：" + args[0]);
+                console.Line("  （无参数）= 13 类操作测试；demo = DbUpgrade 演示；ops [--dialect=...] = 指定方言跑操作测试");
+                return 1;
             }
             catch (Exception ex)
             {

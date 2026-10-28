@@ -19,12 +19,11 @@ namespace DbChronicle.Demo.Scenarios
             _config = config;
         }
 
-        public void Run()
+        public bool Run()
         {
             var factory = AdoNetExecutorFactory.Resolve(_config.Database.Dialect);
             var connectionString = DemoConnectionStrings.ResolvePostgreSql();
 
-            // 组件用法就这三步：连接 → 创建 IDbChronicle → DbUpgrade
             using (var executor = factory.Create(connectionString))
             using (var chronicle = DbChronicleFactory.Create(executor, new DbChronicleOptions
             {
@@ -38,6 +37,7 @@ namespace DbChronicle.Demo.Scenarios
                     + "，跳过 " + result.SkippedCount
                     + "，失败 " + result.FailedCount
                     + (string.IsNullOrEmpty(result.Message) ? "" : "，" + result.Message));
+                return result.Success;
             }
         }
     }

@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<changeUnit id="20261028_100121_a15001" author="ops-test" release="20261028">
+  <description>第 2 类 数据类型映射：20 种逻辑类型各建一列，断言方言映射结果</description>
+
+  <table name="dcops_t15_types" action="CREATE">
+    <column name="c_bool" action="ADD" type="Boolean" nullable="true"/>
+    <column name="c_int8" action="ADD" type="Int8" nullable="true"/>
+    <column name="c_int16" action="ADD" type="Int16" nullable="true"/>
+    <column name="c_int32" action="ADD" type="Int32" nullable="true"/>
+    <column name="c_int64" action="ADD" type="Int64" nullable="true"/>
+    <column name="c_float32" action="ADD" type="Float32" nullable="true"/>
+    <column name="c_float64" action="ADD" type="Float64" nullable="true"/>
+    <column name="c_decimal" action="ADD" type="Decimal" precision="12" scale="3" nullable="true"/>
+    <column name="c_fixed" action="ADD" type="FixedString" length="8" nullable="true"/>
+    <column name="c_string" action="ADD" type="String" length="32" nullable="true"/>
+    <column name="c_text" action="ADD" type="Text" nullable="true"/>
+    <column name="c_json" action="ADD" type="Json" nullable="true"/>
+    <column name="c_xml" action="ADD" type="Xml" nullable="true"/>
+    <column name="c_datetime" action="ADD" type="DateTime" nullable="true"/>
+    <column name="c_dto" action="ADD" type="DateTimeOffset" nullable="true"/>
+    <column name="c_date" action="ADD" type="Date" nullable="true"/>
+    <column name="c_time" action="ADD" type="Time" nullable="true"/>
+    <column name="c_binary" action="ADD" type="Binary" length="16" nullable="true"/>
+    <column name="c_blob" action="ADD" type="Blob" nullable="true"/>
+    <column name="c_blob_len" action="ADD" type="Blob" length="1024" nullable="true"/>
+    <column name="c_uuid" action="ADD" type="Uuid" nullable="true"/>
+  </table>
+</changeUnit>

@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<changeUnit id="20261028_100114_a12013" author="ops-test" release="20261028">
+  <description>第 12 类边界：SEED conflict=DEFAULT（普通插入）/ conflict=ERROR（冲突中止执行）</description>
+
+  <table name="dcops_t12b_plain" action="ALTER">
+    <seed table="dcops_t12b_plain" conflict="DEFAULT" columns="id,name">
+      <row values="1,'plain'"/>
+    </seed>
+  </table>
+
+  <table name="dcops_t12b_data" action="ALTER">
+    <seed table="dcops_t12b_data" conflict="ERROR" columns="id,name">
+      <row values="1,'dup'"/>
+    </seed>
+  </table>
+</changeUnit>

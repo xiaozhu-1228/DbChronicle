@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<changeUnit id="20261028_120112_c11011" author="ops-test" release="20261028">
+  <description>第 11 类 存储过程/函数：SQLite 无例程，用 rawSql 透传等价对象（视图）/ DROP</description>
+
+  <function name="dcops_v11_echo">
+    <sql dialect="sqlite"><![CDATA[
+CREATE VIEW dcops_v11_echo AS SELECT 21 * 2 AS r
+]]></sql>
+  </function>
+
+  <rawSql name="dcops_v11_legacy"><![CDATA[
+DROP VIEW IF EXISTS dcops_v11_legacy
+]]></rawSql>
+</changeUnit>

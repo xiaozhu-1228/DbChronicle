@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<changeUnit id="20261028_110110_b09009" author="ops-test" release="20261028">
+  <description>第 9 类 序列操作：CREATE / MODIFY（DROP+CREATE）/ DROP</description>
+
+  <sequence name="seq_t09_order" action="CREATE" start="1000" increment="1"
+            minValue="1" maxValue="999999" cycle="false" cache="20"/>
+
+  <sequence name="seq_t09_order" action="MODIFY" start="2000" increment="2"
+            minValue="1" maxValue="999999" cycle="true" cache="50"/>
+
+  <sequence name="seq_t09_legacy" action="DROP"/>
+</changeUnit>

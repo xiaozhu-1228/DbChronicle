@@ -364,6 +364,10 @@ namespace DbChronicle.Compilation.Dialects
             {
                 stringBuilder.Append(" AUTO_INCREMENT");
             }
+            if (column.Unique.GetValueOrDefault())
+            {
+                stringBuilder.Append(" UNIQUE");
+            }
             if (!string.IsNullOrEmpty(column.OnUpdate))
             {
                 stringBuilder.Append(" ON UPDATE ").Append(column.OnUpdate);

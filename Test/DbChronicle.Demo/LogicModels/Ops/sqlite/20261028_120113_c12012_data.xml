@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<changeUnit id="20261028_120113_c12012" author="ops-test" release="20261028">
+  <description>第 12 类 数据操作：before 迁移/清洗/回填 + SEED(UPDATE/IGNORE) 12.1 + UPDATE 12.2 + DELETE 12.3 + CLEAN 多规则 12.4 + MIGRATE 12.5 + BACKFILL 12.6</description>
+
+  <table name="dcops_t12_data" action="ALTER">
+    <dataMigration stage="before">
+      <sql dialect="any">UPDATE dcops_t12_data SET name = 'before-mig' WHERE id = 2;</sql>
+    </dataMigration>
+
+    <clean rules="email = 'unknown@local'" where="email IS NULL" stage="before"/>
+    <backfill column="status" value="9" where="status = 0" stage="before"/>
+
+    <column name="note" action="ADD" type="String" length="64" nullable="true"/>
+
+    <seed table="dcops_t12_data" conflict="UPDATE" columns="id,name,email,status,score">
+      <row values="1,'a-updated','a@x',1,11"/>
+      <row values="4,'d','d@x',1,40"/>
+    </seed>
+
+    <seed table="dcops_t12_data" conflict="IGNORE" columns="id,name,status">
+      <row values="4,'ignored',99"/>
+    </seed>
+
+    <update set="score = score + 5" where="status = 1"/>
+
+    <clean rules="email = 'clean@x'; status = 77" where="email = ''"/>
+
+    <backfill column="note" value="'filled'" where="note IS NULL"/>
+
+    <dataMigration>
+      <sql dialect="sqlite">UPDATE dcops_t12_data SET score = 100 WHERE id = 4;</sql>
+    </dataMigration>
+
+    <dataMigration>
+      <sql dialect="oracle">UPDATE dcops_t12_data SET score = 999 WHERE id = 1;</sql>
+    </dataMigration>
+
+    <delete where="id = 3"/>
+  </table>
+</changeUnit>

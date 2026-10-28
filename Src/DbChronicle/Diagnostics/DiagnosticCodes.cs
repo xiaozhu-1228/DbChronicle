@@ -29,6 +29,8 @@ namespace DbChronicle.Diagnostics
         public const string ObjectCommentUnsupported = "W031";
         public const string DialectSqlMissing = "W032";
         public const string DataMigrationSqlMissing = "W033";
+        public const string AutoIncrementModifyUnsupported = "E052";
+        public const string ColumnReorderBeforeUnsupported = "E053";
         public const string ColumnReorderUnsupported = "E044";
         public const string SequenceUnsupported = "E046";
         public const string TableOptionUnsupported = "E047";

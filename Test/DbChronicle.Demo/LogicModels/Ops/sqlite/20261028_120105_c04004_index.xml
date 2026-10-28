@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<changeUnit id="20261028_120105_c04004" author="ops-test" release="20261028">
+  <description>第 4 类 索引操作：普通/唯一/复合/DROP/函数/部分/全文（W017 降级）/ RENAME（W028 不支持）</description>
+
+  <table name="dcops_t04_idx" action="ALTER">
+    <index name="idx_t04_normal" action="ADD" columns="a"/>
+    <index name="idx_t04_unique" action="ADD" unique="true" columns="email"/>
+    <index name="idx_t04_composite" action="ADD" columns="b,c"/>
+    <index name="idx_t04_func" action="ADD" expression="LOWER(email)"/>
+    <index name="idx_t04_partial" action="ADD" columns="a" where="a &gt; 0"/>
+    <index name="idx_t04_fulltext" action="ADD" type="FULLTEXT" columns="body"/>
+    <index name="idx_t04_old_name" action="RENAME" newName="idx_t04_new_name"/>
+    <index name="idx_t04_legacy" action="DROP"/>
+  </table>
+</changeUnit>

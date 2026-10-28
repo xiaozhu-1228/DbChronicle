@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<changeUnit id="20261028_100118_a14003" author="ops-test" release="20261028">
+  <description>rawSql 边界：空 &lt;sql&gt; 子节点（内容为空串）的程序行为探测</description>
+
+  <rawSql name="dcops_t14c_empty"><sql dialect="any"></sql></rawSql>
+</changeUnit>

@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<changeUnit id="20261028_120114_c13013" author="ops-test" release="20261028">
+  <description>第 13 类 高级对象：同义词 13.6（视图模拟）/ 分区 13.4（多表 + UNION 视图模拟）；引擎/字符集/表空间/权限见 T13b 与报告说明</description>
+
+  <rawSql name="dcops_t13_synonym"><![CDATA[
+CREATE VIEW dcops_v13_synonym AS SELECT id, payload FROM dcops_t13_adv
+]]></rawSql>
+
+  <rawSql name="dcops_t13_partition"><![CDATA[
+CREATE TABLE dcops_t13_part_a (id INTEGER NOT NULL PRIMARY KEY, payload TEXT);
+CREATE TABLE dcops_t13_part_b (id INTEGER NOT NULL PRIMARY KEY, payload TEXT);
+CREATE VIEW dcops_t13_part_all AS SELECT id, payload FROM dcops_t13_part_a UNION ALL SELECT id, payload FROM dcops_t13_part_b
+]]></rawSql>
+</changeUnit>

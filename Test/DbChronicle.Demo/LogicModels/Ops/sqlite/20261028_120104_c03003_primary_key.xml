@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<changeUnit id="20261028_120104_c03003" author="ops-test" release="20261028">
+  <description>第 3 类 主键操作：ADD / DROP / REPLACE（SQLite 全部走 rebuild）</description>
+
+  <table name="dcops_t03_add" action="ALTER">
+    <primaryKey action="ADD" name="pk_t03_add" columns="id"/>
+  </table>
+
+  <table name="dcops_t03_drop" action="ALTER">
+    <primaryKey action="DROP" name="pk_t03_drop"/>
+  </table>
+
+  <table name="dcops_t03_replace" action="ALTER">
+    <primaryKey action="REPLACE" name="pk_t03_replace" columns="code"/>
+  </table>
+</changeUnit>

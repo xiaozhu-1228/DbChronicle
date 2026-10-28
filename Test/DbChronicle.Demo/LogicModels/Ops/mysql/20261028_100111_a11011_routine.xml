@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<changeUnit id="20261028_100111_a11011" author="ops-test" release="20261028">
+  <description>第 11 类 存储过程/函数：CREATE PROCEDURE + CREATE FUNCTION（rawSql 透传）/ DROP</description>
+
+  <procedure name="dcops_p11_echo">
+    <sql dialect="mysql"><![CDATA[
+CREATE PROCEDURE dcops_p11_echo(IN v INT, OUT r INT)
+BEGIN
+  SET r = v * 2;
+END
+]]></sql>
+  </procedure>
+
+  <function name="dcops_f11_echo">
+    <sql dialect="mysql"><![CDATA[
+DROP FUNCTION IF EXISTS dcops_f11_echo;
+CREATE FUNCTION dcops_f11_echo(v INT) RETURNS INT DETERMINISTIC
+RETURN v * 2
+]]></sql>
+  </function>
+
+  <rawSql name="dcops_p11_legacy"><![CDATA[
+DROP PROCEDURE IF EXISTS dcops_p11_legacy
+]]></rawSql>
+
+  <rawSql name="dcops_f11_legacy"><![CDATA[
+DROP FUNCTION IF EXISTS dcops_f11_legacy
+]]></rawSql>
+</changeUnit>
