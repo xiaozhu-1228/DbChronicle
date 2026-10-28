@@ -16,13 +16,84 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- 测试可访问插件加载引擎的内部实现（PluginCatalog / PluginScope） -->
+    <InternalsVisibleTo Include="DbChronicle.Cli.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\DbChronicle\DbChronicle.csproj" />
-    <!-- 数据库驱动在独立执行器库，核心库保持零第三方依赖；CLI 只是它的一个消费者 -->
-    <ProjectReference Include="..\DbChronicle.Executor.AdoNet\DbChronicle.Executor.AdoNet.csproj" />
-    <!-- Roslyn 源码扫描（scan 命令的 source 参数）按需引用 -->
-    <ProjectReference Include="..\DbChronicle.Scanner.Source\DbChronicle.Scanner.Source.csproj" />
-    <!-- Java / Go / TypeScript 源码扫描 -->
-    <ProjectReference Include="..\DbChronicle.Scanner.Languages\DbChronicle.Scanner.Languages.csproj" />
+    <!--
+      能力插件（DbChronicle.Executor.* / DbChronicle.Scanner.*）不在此处引用：
+      依赖方向是「插件 → CLI」（插件要拿 Plugins/ 下的契约类型），CLI 反向引用会成环。
+      插件 dll 由下面的 CopyPluginOutputs 在构建后复制到 <输出>/plugins，运行时按需反射加载。
+    -->
+  </ItemGroup>
+
+  <!-- 变体包的 PackageId：默认 DbChronicle.Cli（不含插件） -->
+  <PropertyGroup Condition="'$(IncludeAdoNet)' == 'true' and '$(IncludeScannerSource)' == 'true' and '$(IncludeScannerLanguages)' == 'true'">
+    <PackageId>DbChronicle.Cli.All</PackageId>
+    <Description>数据库版本托管与升级工具集（含执行器与各语言源码扫描）</Description>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(IncludeAdoNet)' == 'true' and ('$(IncludeScannerSource)' != 'true' or '$(IncludeScannerLanguages)' != 'true')">
+    <PackageId>DbChronicle.Cli.AdoNet</PackageId>
+    <Description>数据库版本托管与升级工具集（含 ADO.NET 执行器）</Description>
+  </PropertyGroup>
+
+  <!--
+    构建后把各插件输出（含第三方依赖与 runtimes 原生库）复制到 plugins/<插件名>/，
+    供 PluginHost 按需加载。每个插件独占子目录：删/禁用整个目录不会波及别的能力。
+    DestinationFiles + RecursiveDir 保留子目录，否则 SQLite 等原生库会因结构丢失而加载失败。
+  -->
+  <Target Name="CopyPluginOutputs" AfterTargets="Build">
+    <!-- 清理早期扁平布局残留（plugins/*.dll 与 plugins/runtimes），否则会优先加载到旧版插件 -->
+    <ItemGroup>
+      <_StaleFlatPlugin Include="$(OutDir)plugins\*.dll" />
+    </ItemGroup>
+    <Delete Files="@(_StaleFlatPlugin)" ContinueOnError="true" />
+    <RemoveDir Directories="$(OutDir)plugins\runtimes" ContinueOnError="true" />
+
+    <ItemGroup>
+      <_AdoNetFiles Include="..\DbChronicle.Executor.AdoNet\bin\$(Configuration)\net8.0\**\*.*"
+                    Exclude="..\DbChronicle.Executor.AdoNet\bin\$(Configuration)\net8.0\DbChronicle.dll;..\DbChronicle.Executor.AdoNet\bin\$(Configuration)\net8.0\ref\**\*.*;..\DbChronicle.Executor.AdoNet\bin\$(Configuration)\net8.0\**\*.pdb" />
+      <_SourceFiles Include="..\DbChronicle.Scanner.Source\bin\$(Configuration)\net8.0\**\*.*"
+                    Exclude="..\DbChronicle.Scanner.Source\bin\$(Configuration)\net8.0\DbChronicle.dll;..\DbChronicle.Scanner.Source\bin\$(Configuration)\net8.0\ref\**\*.*;..\DbChronicle.Scanner.Source\bin\$(Configuration)\net8.0\**\*.pdb" />
+      <_LanguageFiles Include="..\DbChronicle.Scanner.Languages\bin\$(Configuration)\net8.0\**\*.*"
+                      Exclude="..\DbChronicle.Scanner.Languages\bin\$(Configuration)\net8.0\DbChronicle.dll;..\DbChronicle.Scanner.Languages\bin\$(Configuration)\net8.0\ref\**\*.*;..\DbChronicle.Scanner.Languages\bin\$(Configuration)\net8.0\**\*.pdb" />
+    </ItemGroup>
+    <Copy SourceFiles="@(_AdoNetFiles)"
+          DestinationFiles="@(_AdoNetFiles->'$(OutDir)plugins\adonet\%(RecursiveDir)%(Filename)%(Extension)')"
+          SkipUnchangedFiles="true" ContinueOnError="true" />
+    <Copy SourceFiles="@(_SourceFiles)"
+          DestinationFiles="@(_SourceFiles->'$(OutDir)plugins\scanner-source\%(RecursiveDir)%(Filename)%(Extension)')"
+          SkipUnchangedFiles="true" ContinueOnError="true" />
+    <Copy SourceFiles="@(_LanguageFiles)"
+          DestinationFiles="@(_LanguageFiles->'$(OutDir)plugins\scanner-languages\%(RecursiveDir)%(Filename)%(Extension)')"
+          SkipUnchangedFiles="true" ContinueOnError="true" />
+  </Target>
+
+  <!--
+    NuGet 变体包：默认（DbChronicle.Cli）不含插件；
+    -p:IncludeAdoNet=true 出 DbChronicle.Cli.AdoNet；-p:IncludeAll=true 出全量包。
+    插件 dll 打进 tools/net8.0/any/plugins/<插件名>/，装完工具即可按需加载。
+    打包前必须先构建插件（见 Tools/pack.ps1）。
+  -->
+  <ItemGroup Condition="'$(IncludeAdoNet)' == 'true'">
+    <None Include="..\DbChronicle.Executor.AdoNet\bin\$(Configuration)\net8.0\**\*.*"
+          Exclude="..\DbChronicle.Executor.AdoNet\bin\$(Configuration)\net8.0\DbChronicle.dll;..\DbChronicle.Executor.AdoNet\bin\$(Configuration)\net8.0\ref\**\*.*;..\DbChronicle.Executor.AdoNet\bin\$(Configuration)\net8.0\**\*.pdb"
+          Pack="true" PackagePath="tools/net8.0/any/plugins/adonet/" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(IncludeScannerSource)' == 'true'">
+    <None Include="..\DbChronicle.Scanner.Source\bin\$(Configuration)\net8.0\**\*.*"
+          Exclude="..\DbChronicle.Scanner.Source\bin\$(Configuration)\net8.0\DbChronicle.dll;..\DbChronicle.Scanner.Source\bin\$(Configuration)\net8.0\ref\**\*.*;..\DbChronicle.Scanner.Source\bin\$(Configuration)\net8.0\**\*.pdb"
+          Pack="true" PackagePath="tools/net8.0/any/plugins/scanner-source/" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(IncludeScannerLanguages)' == 'true'">
+    <None Include="..\DbChronicle.Scanner.Languages\bin\$(Configuration)\net8.0\**\*.*"
+          Exclude="..\DbChronicle.Scanner.Languages\bin\$(Configuration)\net8.0\DbChronicle.dll;..\DbChronicle.Scanner.Languages\bin\$(Configuration)\net8.0\ref\**\*.*;..\DbChronicle.Scanner.Languages\bin\$(Configuration)\net8.0\**\*.pdb"
+          Pack="true" PackagePath="tools/net8.0/any/plugins/scanner-languages/" />
   </ItemGroup>
 
 </Project>

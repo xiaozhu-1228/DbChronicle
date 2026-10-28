@@ -988,13 +988,13 @@ API 与 CLI `new` 命令共享同一套命名逻辑，保证文件名规范一�
 </changeUnit>
 ```
 
-| 属性/节点       | 必填   | 说明                              |
-| --------------- | ------ | --------------------------------- |
-| `id`            | 是     | 全局唯一，与文件名前缀一致        |
-| `author`        | 是     | 变更作者                          |
-| **`release`**   | **是** | **所属发布版本，格式 `yyyyMMdd`** |
-| `<description>` | 是     | 人类可读的变更说明                |
-| `<depends>`     | 否     | 显式声明依赖的变更单元 id         |
+| 属性/节点       | 必填   | 说明                                                        |
+| --------------- | ------ | ----------------------------------------------------------- |
+| `id`            | 是     | 全局唯一，与文件名前缀一致                                  |
+| `author`        | 是     | 变更作者                                                    |
+| **`release`**   | **是** | **所属发布版本，格式 `yyyyMMdd`**                           |
+| `<description>` | 是     | 人类可读的变更说明                                          |
+| `<depends>`     | 否     | 显式声明依赖的变更单元 id                                   |
 | `<rawSql>`      | 否     | 直接写 SQL 文本，原样执行、不做分析、不区分方言（见 4.5.8） |
 
 **`release` 约束：**
@@ -1263,18 +1263,18 @@ INSERT INTO nor_sys_log (msg) VALUES ('migrated by 1.2.0');
 </changeUnit>
 ```
 
-| 项 | 规则 |
-| --- | --- |
-| 语法 | `<rawSql>…</rawSql>`，直接文本；含 `<` `>` `&` 或长脚本时用 CDATA |
-| 是否分析 | **不分析**——不解析表名、不校验语法、不推断类型；由数据库在执行期判定对错 |
-| 是否分方言 | **不区分方言，也不提供 `dialect` 属性**（原因见下） |
-| 位置 | **只能作为 `<changeUnit>` 的直接子节点**；写在 `<table>` 内按未知节点忽略并告警 W020（逻辑模型内不混写原始 SQL） |
-| 表归属 | 可选 `name="表名"`，仅用于分组与日志，不影响执行 |
-| 多语句 | 允许。编译期只按方言分隔符**文本拆分**成多条语句，不做语义处理 |
-| 执行顺序 | 排在全部结构化操作之后（与其他 rawSql 同组，组内按声明顺序） |
-| 幂等性 | 原样执行，**不保证幂等**——重复执行由 SQL 自身负责（如 `WHERE NOT EXISTS`） |
-| 回滚 | 视为不可逆操作，`rollback` 时标记为 blocker，需人工处理 |
-| 空内容 | 解析失败（**E051**） |
+| 项         | 规则                                                                                                             |
+| ---------- | ---------------------------------------------------------------------------------------------------------------- |
+| 语法       | `<rawSql>…</rawSql>`，直接文本；含 `<` `>` `&` 或长脚本时用 CDATA                                                |
+| 是否分析   | **不分析**——不解析表名、不校验语法、不推断类型；由数据库在执行期判定对错                                         |
+| 是否分方言 | **不区分方言，也不提供 `dialect` 属性**（原因见下）                                                              |
+| 位置       | **只能作为 `<changeUnit>` 的直接子节点**；写在 `<table>` 内按未知节点忽略并告警 W020（逻辑模型内不混写原始 SQL） |
+| 表归属     | 可选 `name="表名"`，仅用于分组与日志，不影响执行                                                                 |
+| 多语句     | 允许。编译期只按方言分隔符**文本拆分**成多条语句，不做语义处理                                                   |
+| 执行顺序   | 排在全部结构化操作之后（与其他 rawSql 同组，组内按声明顺序）                                                     |
+| 幂等性     | 原样执行，**不保证幂等**——重复执行由 SQL 自身负责（如 `WHERE NOT EXISTS`）                                       |
+| 回滚       | 视为不可逆操作，`rollback` 时标记为 blocker，需人工处理                                                          |
+| 空内容     | 解析失败（**E051**）                                                                                             |
 
 **为什么 `rawSql` 不需要 `dialect` 属性：**
 
@@ -1372,7 +1372,7 @@ INSERT INTO nor_sys_log (msg) VALUES ('migrated by 1.2.0');
 | `MODIFY` 在 full 模式下未声明 `defaultValue`（= 目标无默认值）           | 警告（W008）                        |
 | `foreignKey` 格式必须为 `表名.列名`                                      | 解析失败                            |
 | 同一 `changeUnit` 内，同一表同一列不得重复出现                           | 解析失败                            |
-| `rawSql` 直接写文本时不区分方言；旧写法（子 `<sql dialect>`）缺当前方言   | 编译时跳过 + 警告（W032）           |
+| `rawSql` 直接写文本时不区分方言；旧写法（子 `<sql dialect>`）缺当前方言  | 编译时跳过 + 警告（W032）           |
 | `DROP_TABLE` / `DROP_COLUMN` 必须有显式 `allowDestructive` 配置          | 解析失败                            |
 | `unsigned=true` 仅对整数类型有效                                         | 解析失败                            |
 | `onUpdate` 仅对 `DateTime` / `DateTimeOffset` 类型有效                   | 解析失败                            |
@@ -3781,20 +3781,142 @@ db-chronicle init --dialect postgresql --version 16
 | Global Tool | `dotnet tool install -g DbChronicle.Cli` | 开发者                    |
 | 自包含 exe  | `dotnet publish --self-contained`        | DBA / 服务器 / 跨语言调用 |
 
+**插件化发布**：CLI 是命令宿主，数据库执行与源码扫描由插件提供，两条分发通道。
+
+**① NuGet（dotnet tool 变体包）** —— `Tools/pack.ps1`
+
+| 包                       | 内含插件 | 体积（实测） | 说明                                            |
+| ------------------------ | -------- | ------------ | ----------------------------------------------- |
+| `DbChronicle.Cli`        | 无       | 0.18 MB      | 只要 `compile` / `check` / `status` / `codegen` |
+| `DbChronicle.Cli.AdoNet` | `adonet` | 17.3 MB      | 追加 `upgrade` / `scan-db` / `rollback --apply` |
+| `DbChronicle.Cli.All`    | 三个全带 | 22.4 MB      | 装完即用，用 `plugin disable` 关掉不需要的      |
+
+装完全量包后可按需启停（状态存用户目录，`dotnet tool update` 不恢复）：
+
+```powershell
+db-chronicle plugin list
+db-chronicle plugin disable scanner-source
+db-chronicle plugin enable scanner-source
+```
+
+**② zip（离线 / 自包含 / 内网）** —— `Tools/publish.ps1`：
+
+| 组合      | 命令                               | 体积（实测）         | 可用能力                                                                                         |
+| --------- | ---------------------------------- | -------------------- | ------------------------------------------------------------------------------------------------ |
+| 基础包    | `./Tools/publish.ps1 -Output dist` | 约 1 MB              | `init` `new` `compile` `check` `status` `verify` `rollback`(dry-run) `codegen` `scan --assembly` |
+| + 执行器  | `-Plugins adonet`                  | +17.7 MB（四个驱动） | 追加 `upgrade` `scan-db` `rollback --apply`                                                      |
+| + C# 源码 | `-Plugins source`                  | +9.4 MB（Roslyn）    | 追加 `scan --source --lang csharp`                                                               |
+| + 多语言  | `-Plugins languages`               | 约 +50 KB            | 追加 `scan --source --lang java\|go\|typescript\|auto`                                           |
+| 全量      | `-Plugins all`                     | 约 28 MB             | 全部                                                                                             |
+
 ### 8.4 退出码
 
 CI 靠退出码判断成败，不能依赖 stdout 文本。所有命令统一使用下表（一期实现）：
 
-| 码  | 含义                                                                    | 典型命令         |
-| --- | ----------------------------------------------------------------------- | ---------------- |
-| 0   | 成功；`status` 表示"数据库已是最新"                                     | 全部             |
-| 1   | 参数错误 / 前置校验失败（文件名不合规、`release` 格式错、缺 `depends`） | 全部             |
-| 2   | 有待应用变更（仅 `status` 使用，用于 CI 判断"是否需要跑 apply"）        | `status`         |
-| 3   | 执行失败 / 校验失败（SQL 报错、checksum 不一致、文件丢失）              | `apply` `verify` |
-| 4   | 无法获取库级互斥锁（另一进程正在 apply）                                | `apply`          |
-| 5   | 环境问题（连接失败、非交互环境缺 `DBCHRONICLE_CONN`）                   | 需要连接的命令   |
+| 码  | 含义                                                                    | 典型命令                            |
+| --- | ----------------------------------------------------------------------- | ----------------------------------- |
+| 0   | 成功；`status` 表示"数据库已是最新"                                     | 全部                                |
+| 1   | 参数错误 / 前置校验失败（文件名不合规、`release` 格式错、缺 `depends`） | 全部                                |
+| 2   | 有待应用变更（仅 `status` 使用，用于 CI 判断"是否需要跑 apply"）        | `status`                            |
+| 3   | 执行失败 / 校验失败（SQL 报错、checksum 不一致、文件丢失）              | `apply` `verify`                    |
+| 4   | 无法获取库级互斥锁（另一进程正在 apply）                                | `apply`                             |
+| 5   | 环境问题（连接失败、非交互环境缺 `DBCHRONICLE_CONN`）                   | 需要连接的命令                      |
+| 6   | **缺少所需能力**（执行器 / 扫描器插件未部署到 `plugins/`）              | `upgrade` `scan-db` `scan --source` |
 
 **约定：** `upgrade`（历史别名 `apply`，下文叙述统一用 `apply` 指代该命令）在任何非 0 退出前都不得写入 version_log 记录（有事务方言回滚并删除该单元的状态记录，无事务方言保持"半态 + `failure_at` 标记"）。`status` / `verify` 只读本地状态文件，不需要连接信息，因此不会返回 5。
+
+### 8.5 插件化架构
+
+CLI 不静态绑定任何数据库驱动或语言扫描器，能力全部通过插件注册。
+
+**分层与依赖方向**
+
+| 层     | 组成                                                                                                   | 依赖                            |
+| ------ | ------------------------------------------------------------------------------------------------------ | ------------------------------- |
+| 核心库 | `DbChronicle`：编译 / 编排 / 回滚 / 反射扫描 / 数据库反向扫描 / 代码生成                               | 零第三方依赖                    |
+| 宿主   | `DbChronicle.Cli`：命令分派 + 插件契约 + 加载引擎                                                      | → 核心库                        |
+| 插件   | `DbChronicle.Executor.AdoNet` / `Scanner.Source` / `Scanner.Languages`（`Executor.EfCore` 供应用内嵌） | → CLI（取契约），**不反向依赖** |
+
+**契约**（位于 `Src/DbChronicle.Cli/Plugins/`，编译进 `db-chronicle.dll`，不单独发包）
+
+| 类型                                               | 用途                                                                                 |
+| -------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| `[DbChroniclePlugin(Name, Order, MinHostVersion)]` | 插件入口标记（标在静态类上）                                                         |
+| `IPluginRegistry`                                  | 插件侧注册：`AddExecutor` / `AddSourceScanner` / `AddCodeGenerator` / `AddCommand`   |
+| `IPluginCatalog`                                   | 宿主侧取用：`ResolveExecutor` / `ResolveLocks` / `ResolveSourceScanner` / `Commands` |
+| `ISourceScanner`                                   | 源码扫描器统一接口（`Language` + `ScanDirectory`）                                   |
+| `ICommandContext`                                  | 插件命令上下文（`Get` / `Has` / `Config` / `Out` / `Error`）                         |
+| `PluginNotInstalledException`                      | 能力缺失，携带部署提示（映射退出码 6）                                               |
+
+**加载引擎**
+
+| 类型                | 职责                                                                                                                    |
+| ------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `PluginHost`        | 按"能力 → 程序集名"约定定位 dll；首次需要时加载、缓存到进程退出；`--unload-plugins` 时卸载                              |
+| `PluginScope`       | 一次加载的容器：collectible ALC + 能力目录；`Dispose` 先清注册表再 `Unload`                                             |
+| `PluginLoadContext` | 插件及其依赖从插件目录解析；**宿主与核心库交回默认 ALC**（杜绝两份同名程序集）；`runtimes/{rid}/native/` 原生库手工探测 |
+| `PluginCatalog`     | 能力字典 + `Order` 冲突处理（高者胜）+ `Clear`                                                                          |
+
+**加载时机**
+
+| 命令                                                                                                                            | 需要加载的插件                            |
+| ------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------- |
+| `init` `new` `compile` `check` `status` `verify` `rollback`(dry-run) `codegen` `scan --assembly` `plugin list\|disable\|enable` | **无**                                    |
+| `upgrade` / `apply` / `scan-db` / `rollback --apply`                                                                            | `DbChronicle.Executor.AdoNet`             |
+| `scan --source --lang csharp`                                                                                                   | `DbChronicle.Scanner.Source`（含 Roslyn） |
+| `scan --source --lang java` / `go` / `typescript` / `auto`                                                                      | `DbChronicle.Scanner.Languages`           |
+
+**目录布局与开关**
+
+每个插件**独占一个子目录**（自带第三方依赖与 `runtimes/` 原生库），删/禁用整个目录不会波及别的能力：
+
+```
+plugins/
+├── adonet/                       ← 一个能力包
+│   ├── DbChronicle.Executor.AdoNet.dll
+│   ├── MySqlConnector.dll · Npgsql.dll · SqlClient · Sqlite
+│   └── runtimes/win-x64/native/e_sqlite3.dll
+├── scanner-source/
+│   ├── DbChronicle.Scanner.Source.dll
+│   └── Microsoft.CodeAnalysis*.dll
+└── scanner-languages/
+```
+
+| 项                             | 说明                                                                                                                                               |
+| ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 插件根目录                     | 默认 `<exe>/plugins`；不存在则回退 `<exe>`（开发期 `bin` 根目录）；同时兼容 `plugins/*.dll` 扁平布局                                               |
+| `--plugin-dir <dir>`           | 指定插件根目录                                                                                                                                     |
+| `--unload-plugins`             | 命令结束后 `Unload`。默认不卸载：实测插件加载仅 30~50 ms，进程退出即回收，显式卸载反而增加复杂度                                                   |
+| `plugin list`                  | 列出已部署插件、启停状态、目录内程序集                                                                                                             |
+| `plugin disable/enable <name>` | 启停插件；状态写 `%LOCALAPPDATA%\DbChronicle\settings.json`（Linux：`~/.local/share/DbChronicle/`），**`dotnet tool update` 不会恢复被禁用的插件** |
+| 缺插件                         | "缺少「数据库执行器（mysql）」能力：请把 DbChronicle.Executor.AdoNet.dll 部署到 plugins 目录"，退出码 **6**                                        |
+
+**编写新插件**
+
+```csharp
+[DbChroniclePlugin(Name = "my-plugin")]
+public static class MyPlugin
+{
+    public static void Initialize(IPluginRegistry registry)
+    {
+        registry.AddExecutor("oracle", () => new OracleExecutorFactory());
+        registry.AddCommand("docgen", ctx => DocGenerator.Run(ctx.Config, ctx.Out), "生成结构文档");
+    }
+}
+```
+
+类库引用 `DbChronicle.Cli`（`Private=false`，避免把宿主 dll 复制进插件输出），dll 放入 `plugins/` 即生效，**无需修改 CLI**。
+
+**命令型插件的分派规则**
+
+| 项 | 行为 |
+| --- | --- |
+| 分派优先级 | 内建命令优先；未命中时查插件注册的命令表（`db-chronicle <plugin-command> [options]`） |
+| 参数传递 | 通过 `ICommandContext`（`Get` / `Has` / `Positional` / `Config` / `Out` / `Error`），不暴露 `CliArguments` |
+| 配置 | `Config` 惰性加载，插件命令不读配置时不受 `DbchronicleConfig.xml` 缺失影响 |
+| 退出码 | 处理函数返回的 `int` 直接作为进程退出码（与内建命令同一套语义） |
+| 查看 | `db-chronicle plugin list` 会列出已注册的插件命令 |
+| 加载失败 | 插件加载异常不会把"未知命令"变成崩溃，仍退回内建 usage |
 
 ---
 
@@ -3834,25 +3956,37 @@ DbChronicle/
 │   │   ├── Configuration/                # 配置模型与加载
 │   │   └── DbChronicle.csproj
 │   │
-│   ├── DbChronicle.Cli/                  # 命令行（dotnet tool: DbChronicle.Cli）
-│   │   ├── Program.cs / Commands.cs / CliArguments.cs / ConnectionResolver.cs
+│   ├── DbChronicle.Cli/                  # 命令宿主（dotnet tool: DbChronicle.Cli）
+│   │   ├── Program.cs / CliArguments.cs / ConnectionResolver.cs / PluginCommandContext.cs
+│   │   ├── Commands.cs                   # 门面 + Init/New + 共享辅助（LoadConfig 等）
+│   │   ├── Commands.Schema.cs            # Compile / SelectUnits / Check
+│   │   ├── Commands.Migration.cs         # Apply / Status / Verify / Rollback
+│   │   ├── Commands.Reverse.cs           # Scan / GenerateCode / ScanDatabase
+│   │   ├── Commands.Plugin.cs            # Plugin / PluginList / SetPluginState
 │   │   ├── ExitCodes.cs / CliFailureException.cs
+│   │   ├── Plugins/                      # 插件契约（对插件公开的 ABI）
+│   │   │   ├── DbChroniclePluginAttribute.cs / IPluginRegistry.cs / IPluginCatalog.cs
+│   │   │   ├── ISourceScanner.cs / ICommandContext.cs / PluginNotInstalledException.cs
+│   │   │   ├── PluginSettings.cs / PluginFolder.cs
+│   │   │   └── Loading/                  # PluginHost / PluginScope / PluginLoadContext / PluginCatalog
 │   │   └── DbChronicle.Cli.csproj
 │   │
-│   ├── DbChronicle.Executor.AdoNet/      # ADO.NET 执行器 + 库级锁（唯一带驱动的地方）
-│   ├── DbChronicle.Executor.EfCore/      # EF Core 执行器（复用宿主 DbContext）
-│   ├── DbChronicle.Scanner.Source/       # Roslyn 源码扫描（scan 命令的 source 模式）
-│   ├── DbChronicle.Scanner.Languages/    # Java / Go / TypeScript 实体扫描
+│   ├── DbChronicle.Executor.AdoNet/      # 插件：ADO.NET 执行器 + 库级锁（唯一带驱动的地方）
+│   ├── DbChronicle.Executor.EfCore/      # 插件（应用内嵌）：EF Core 执行器
+│   ├── DbChronicle.Scanner.Source/       # 插件：Roslyn 源码扫描（scan --source --lang csharp）
+│   ├── DbChronicle.Scanner.Languages/    # 插件：Java / Go / TypeScript 源码扫描
 │   │
 │   └── Tests/
 │       ├── DbChronicle.Tests/            # 单元：解析 / 编译 / 方言 / 拆分 / 检查 / 注释 / 代码生成
-│       ├── DbChronicle.Cli.Tests/        # CLI 层：参数 / 连接解析 / 命令退出码
+│       ├── DbChronicle.Cli.Tests/        # CLI 层：参数 / 连接解析 / 命令退出码 / 插件宿主
 │       ├── DbChronicle.Scanner.Tests/    # 单元：反向工程（类型映射 / 特性读取 / XML）
 │       └── DbChronicle.IntegrationTests/ # 集成：SQLite 真跑 + 反向扫描 + EF Core 执行器
 │
 ├── Test/                                 # 示例与演示（不随核心库发布）
 │   ├── samples/                          # 示例工程（config + migrations + version_log）
 │   └── DbChronicle.Demo/                 # 可运行演示（MySQL / PostgreSQL）
+│
+├── Tools/                                # 发布脚本（基础包 + 按需插件）
 │
 ├── Docs/                                 # 方案文档 + CI 模板
 │
@@ -4293,19 +4427,21 @@ Src/
 │   ├── Diagnostics/                   DiagnosticCodes
 │   ├── Execution/                     IDbExecutor / IDbExecutorFactory / IDbLock / IDbLockFactory
 │   └── Embedded/                      DbChronicleFactory / IDbChronicle / DefaultDbChronicle
-├── DbChronicle.Cli/                   net8.0 命令行（dotnet tool: DbChronicle.Cli）
-├── DbChronicle.Executor.AdoNet/       ADO.NET 执行器与库级锁（唯一带驱动）
-├── DbChronicle.Executor.EfCore/       EF Core 执行器（复用宿主 DbContext）
-├── DbChronicle.Scanner.Source/        Roslyn 源码扫描（scan 命令的 source 模式）
-├── DbChronicle.Scanner.Languages/     Java / Go / TypeScript 扫描
+├── DbChronicle.Cli/                   命令宿主：Commands.*.cs（partial 分片）+ Plugins/（契约与加载引擎）
+├── DbChronicle.Executor.AdoNet/       插件：ADO.NET 执行器与库级锁（唯一带驱动）
+├── DbChronicle.Executor.EfCore/       插件（应用内嵌）：EF Core 执行器
+├── DbChronicle.Scanner.Source/        插件：Roslyn 源码扫描（scan --source --lang csharp）
+├── DbChronicle.Scanner.Languages/     插件：Java / Go / TypeScript 扫描
 └── Tests/                             测试（四个程序集）
     ├── DbChronicle.Tests/                 单元：解析、编译、方言、拆分、检查、注释、视图/序列、代码生成
-    ├── DbChronicle.Cli.Tests/             CLI 层：参数、连接解析、命令退出码
+    ├── DbChronicle.Cli.Tests/             CLI 层：参数、连接解析、命令退出码、插件宿主
     ├── DbChronicle.Scanner.Tests/         单元：反向工程（类型映射 / 特性读取 / XML）
     └── DbChronicle.IntegrationTests/      集成：SQLite 真跑、数据库反向扫描、源码扫描、EF Core 执行器
 Test/
 ├── DbChronicle.Demo/                  可运行演示（MySQL / PostgreSQL）
 └── samples/                           示例工程（config + migrations + 审计日志）
+Tools/
+└── publish.ps1                        发布脚本（基础包 + 按需插件组合）
 ```
 
 **发布形态（六个包，职责分离）：**
@@ -4401,7 +4537,7 @@ Test/
 
 ### 16.5 测试现状
 
-`dotnet test`：**213 条全部通过**（`Src/Tests` 下四个程序集：DbChronicle.Tests 154 + Scanner.Tests 7 + Cli.Tests 17 + IntegrationTests 35），覆盖：
+`dotnet test`：**234 条全部通过**（`Src/Tests` 下四个程序集：DbChronicle.Tests 162 + Scanner.Tests 7 + Cli.Tests 30 + IntegrationTests 35），覆盖：
 
 - 解析校验（缺 type/length、RENAME、Blob 长度、文件名规范、`stage` 非法 E026、full/增量 MODIFY 规则 E027/E028、同单元重复列 E029）
 - 编译输出（ADD/MODIFY/CREATE、DateTimeOffset 告警、增量补全与 W014 退化、PG 只生成变化项）
@@ -4474,7 +4610,7 @@ MySQL 实测中发现并修复的问题（已加回归测试）：
 
 **升级提示**：旧版本（≤ 2026-10-22）在事务方言失败时可能留下「无 `failure` 标记的已应用记录」，新版无法自动区分。升级后请用 `status` 核对历史单元；若库中确无对应结构，手工删除 `DbchronicleState.xml` 中该 `<applied>` 节点后重跑 `apply`。
 
-验证：`dotnet build` 0 警告 0 错误；`dotnet test` **213/213 通过**（Tests 154 + Scanner 7 + Cli 17 + Integration 35）。
+验证：`dotnet build` 0 警告 0 错误；`dotnet test` **234/234 通过**（Tests 162 + Scanner 7 + Cli 30 + Integration 35）。
 
 仍需人工确认：PostgreSQL / SQL Server 真库 `apply` / `verify` / `rollback`（本机未提供实例），本轮的 SS / PG 修复只有编译输出断言。
 

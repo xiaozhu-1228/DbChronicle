@@ -1,5 +1,8 @@
 using System;
 
+using DbChronicle.Cli.Plugins;
+using DbChronicle.Cli.Plugins.Loading;
+
 namespace DbChronicle.Cli
 {
     internal static class Program
@@ -23,48 +26,81 @@ namespace DbChronicle.Cli
             var command = args[0].ToLowerInvariant();
             var arguments = CliArguments.Parse(Slice(args, 1));
 
-            try
+            // 插件宿主：启动时只定位目录，不加载任何插件 dll（真正需要能力时才加载）
+            using (var plugins = new PluginHost(arguments.Get("plugin-dir", null), arguments.Has("unload-plugins")))
             {
-                switch (command)
+                Commands.Plugins = plugins;
+
+                try
                 {
-                    case "init":
-                        return Commands.Init(arguments);
-                    case "new":
-                        return Commands.New(arguments);
-                    case "compile":
-                        return Commands.Compile(arguments);
-                    case "check":
-                        return Commands.Check(arguments);
-                    case "upgrade":
-                    case "apply":
-                        return Commands.Apply(arguments);
-                    case "status":
-                        return Commands.Status(arguments);
-                    case "verify":
-                        return Commands.Verify(arguments);
-                    case "scan":
-                        return Commands.Scan(arguments);
-                    case "scan-db":
-                        return Commands.ScanDatabase(arguments);
-                    case "codegen":
-                        return Commands.GenerateCode(arguments);
-                    case "rollback":
-                        return Commands.Rollback(arguments);
-                    default:
-                        Console.Error.WriteLine("未知命令：" + command);
-                        PrintUsage();
-                        return ExitCodes.Usage;
+                    switch (command)
+                    {
+                        case "init":
+                            return Commands.Init(arguments);
+                        case "new":
+                            return Commands.New(arguments);
+                        case "compile":
+                            return Commands.Compile(arguments);
+                        case "check":
+                            return Commands.Check(arguments);
+                        case "upgrade":
+                        case "apply":
+                            return Commands.Apply(arguments);
+                        case "status":
+                            return Commands.Status(arguments);
+                        case "verify":
+                            return Commands.Verify(arguments);
+                        case "scan":
+                            return Commands.Scan(arguments);
+                        case "scan-db":
+                            return Commands.ScanDatabase(arguments);
+                        case "codegen":
+                            return Commands.GenerateCode(arguments);
+                        case "rollback":
+                            return Commands.Rollback(arguments);
+                        case "plugin":
+                            return Commands.Plugin(arguments);
+                        default:
+                            // 插件可注册新命令（ICommandContext → 退出码）；内建命令优先
+                            var pluginCommand = ResolvePluginCommand(plugins, command);
+                            if (pluginCommand != null)
+                            {
+                                return pluginCommand.Handler(new PluginCommandContext(arguments));
+                            }
+
+                            Console.Error.WriteLine("未知命令：" + command);
+                            PrintUsage();
+                            return ExitCodes.Usage;
+                    }
+                }
+                catch (PluginNotInstalledException ex)
+                {
+                    Console.Error.WriteLine("error: " + ex.Message);
+                    return ExitCodes.MissingPlugin;
+                }
+                catch (CliFailureException ex)
+                {
+                    Console.Error.WriteLine("error: " + ex.Message);
+                    return ex.ExitCode;
+                }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine("error: " + ex.Message);
+                    return ExitCodes.Execution;
                 }
             }
-            catch (CliFailureException ex)
+        }
+
+        /// <summary>查找插件注册的命令；插件加载失败时退回"未知命令"而不中断。</summary>
+        private static DbChronicle.Cli.Plugins.PluginCommand ResolvePluginCommand(PluginHost plugins, string name)
+        {
+            try
             {
-                Console.Error.WriteLine("error: " + ex.Message);
-                return ex.ExitCode;
+                return plugins.Commands.TryGetValue(name, out var command) ? command : null;
             }
-            catch (Exception ex)
+            catch (Exception)
             {
-                Console.Error.WriteLine("error: " + ex.Message);
-                return ExitCodes.Execution;
+                return null;
             }
         }
 
@@ -95,9 +131,17 @@ namespace DbChronicle.Cli
             Console.WriteLine("  scan-db               从现有数据库反向生成基线草案（--out <file> / --tables a,b / --exclude c）");
             Console.WriteLine("  codegen               由 migrations 生成实体代码（--lang csharp|java|go|typescript|cpp --out <dir> --namespace <ns>）");
             Console.WriteLine("  rollback --to-release <yyyyMMdd>  生成回滚 SQL（默认 dry-run，加 --apply 执行）");
+            Console.WriteLine("  plugin list|disable|enable <name> 查看/启停已部署的插件（状态存用户目录，工具升级后仍有效）");
             Console.WriteLine();
             Console.WriteLine("通用选项：--config <path>（默认 DbchronicleConfig.xml，缺失时自动生成）");
             Console.WriteLine("连接信息：环境变量 DBCHRONICLE_CONN，或交互式输入");
+            Console.WriteLine();
+            Console.WriteLine("插件：--plugin-dir <dir>（默认 <exe>/plugins，缺失时用 <exe> 目录）");
+            Console.WriteLine("      --unload-plugins   命令结束后卸载已加载的插件");
+            Console.WriteLine("      数据库执行（upgrade / scan-db / rollback --apply）与源码扫描（scan --source）");
+            Console.WriteLine("      由插件提供（DbChronicle.Executor.AdoNet / Scanner.Source / Scanner.Languages），");
+            Console.WriteLine("      缺失时输出提示并返回退出码 6。compile / check / new / status / verify 不需要插件。");
+            Console.WriteLine("插件命令：插件可通过 AddCommand 注册新命令（用 db-chronicle plugin list 查看已注册的命令）。");
         }
     }
 }

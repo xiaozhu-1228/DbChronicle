@@ -2,6 +2,8 @@
 
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
+    <!-- 插件需自带第三方依赖（Roslyn），放进 plugins/ 后能被独立加载 -->
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
     <LangVersion>latest</LangVersion>
     <Nullable>disable</Nullable>
     <RootNamespace>DbChronicle.Scanner.Source</RootNamespace>
@@ -13,6 +15,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\DbChronicle\DbChronicle.csproj" />
+    <!-- 插件契约（IPluginRegistry / ISourceScanner）来自 CLI 程序集；Private=false 不复制宿主 dll -->
+    <ProjectReference Include="..\DbChronicle.Cli\DbChronicle.Cli.csproj" Private="false" />
   </ItemGroup>
 
   <ItemGroup>

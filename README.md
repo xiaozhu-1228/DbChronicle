@@ -6,9 +6,12 @@
 
 | 交付物 | 说明 |
 | --- | --- |
-| `DbChronicle` | 核心库（netstandard2.0，**零第三方依赖**）：解析、编译、检查、版本编排、回滚规划、C# 反向扫描 |
-| `DbChronicle.Cli` | 命令行工具（`db-chronicle`，dotnet tool）：编译 / 升级 / 状态 / 校验 / 扫描 / 回滚 |
-| `DbChronicle.Executor.AdoNet` | ADO.NET 执行器与库级锁（MySqlConnector / Npgsql / Microsoft.Data.SqlClient / Microsoft.Data.Sqlite），CLI、集成测试与 Demo 共同引用 |
+| `DbChronicle` | 核心库（netstandard2.0，**零第三方依赖**）：解析、编译、检查、版本编排、回滚规划、C# 反射扫描、数据库反向扫描、代码生成 |
+| `DbChronicle.Cli` | 命令行工具（`db-chronicle`，dotnet tool）：**命令宿主**，能力按需插件化（插件契约也在本程序集内） |
+| `DbChronicle.Executor.AdoNet` | 插件：ADO.NET 执行器与库级锁（MySqlConnector / Npgsql / SqlClient / Sqlite） |
+| `DbChronicle.Executor.EfCore` | 插件（应用内嵌）：EF Core 执行器，复用宿主 `DbContext` |
+| `DbChronicle.Scanner.Source` | 插件：C# 源码扫描（Roslyn，`scan --source --lang csharp`） |
+| `DbChronicle.Scanner.Languages` | 插件：Java / Go / TypeScript 源码扫描 |
 
 ## 快速开始
 
@@ -55,6 +58,65 @@ dotnet run --project Src/DbChronicle.Cli -- codegen --lang cpp --out ./cpp-entit
 
 退出码：`0` 成功、`1` 参数/校验失败、`2` 有待应用变更（仅 `status`）、`3` 执行/校验失败、`4` 未取得库级锁、`5` 环境问题（连接失败、非交互环境缺连接信息）。
 
+## 插件与按需部署
+
+CLI 是命令宿主：核心命令（`init` / `new` / `compile` / `check` / `status` / `verify` / `rollback` / `codegen` / `scan --assembly`）**不需要任何插件**；只有在需要数据库执行或源码扫描时，才加载对应的那一个插件 dll。
+
+| 能力 | 提供者 | 缺失时 |
+| --- | --- | --- |
+| 数据库执行（`upgrade` / `scan-db` / `rollback --apply`） | `DbChronicle.Executor.AdoNet.dll` | 退出码 **6** + "请把 … 部署到 plugins 目录" |
+| C# 源码扫描（`scan --source --lang csharp`） | `DbChronicle.Scanner.Source.dll`（含 Roslyn） | 同上 |
+| Java / Go / TS 源码扫描 | `DbChronicle.Scanner.Languages.dll` | 同上 |
+
+### 分发方式一：dotnet tool（NuGet）
+
+```powershell
+# 三个变体包，按需选一个装
+dotnet tool install -g DbChronicle.Cli           # 无插件，约 0.18 MB（只要 compile/check/status/codegen）
+dotnet tool install -g DbChronicle.Cli.AdoNet    # +执行器，约 17 MB（追加 upgrade/scan-db）
+dotnet tool install -g DbChronicle.Cli.All       # 全量，约 22 MB（装完即用，可关掉不用的）
+
+# 生成本地包
+./Tools/pack.ps1 -Output nupkg
+```
+
+装完全量包后按需启停（状态存用户目录，`dotnet tool update` 不会恢复）：
+
+```powershell
+db-chronicle plugin list                  # 看已部署 / 已禁用 / 各提供什么
+db-chronicle plugin disable scanner-source   # 用不到源码扫描就关掉
+db-chronicle plugin enable scanner-source
+```
+
+### 分发方式二：zip（离线 / 自包含 / 内网）
+
+```powershell
+./Tools/publish.ps1 -Output dist                 # 基础包（仅离线能力）
+./Tools/publish.ps1 -Output dist -Plugins adonet # 带数据库执行能力
+./Tools/publish.ps1 -Output dist -Plugins all    # 全量
+./Tools/publish.ps1 -Output dist -Plugins adonet -SelfContained  # 目标机无需 .NET 运行时
+```
+
+两种方式的产物目录结构相同（**每个插件独占子目录**，删/禁用互不影响）：
+
+```
+dist/  （或 tool 的 tools/net8.0/any/）
+├── db-chronicle.exe / db-chronicle.dll
+├── DbChronicle.dll                 核心库（零第三方依赖）
+└── plugins/
+    ├── adonet/                     ← 整目录 = 一个能力
+    │   ├── DbChronicle.Executor.AdoNet.dll
+    │   ├── MySqlConnector.dll · Npgsql.dll · SqlClient · Sqlite
+    │   └── runtimes/win-x64/native/e_sqlite3.dll
+    └── scanner-source/
+        ├── DbChronicle.Scanner.Source.dll
+        └── Microsoft.CodeAnalysis*.dll
+```
+
+开发期：`dotnet build Src/DbChronicle.sln` 后，CLI 会把插件输出复制到 `bin/<Configuration>/net8.0/plugins/<插件名>/`；也可用 `--plugin-dir <dir>` 指定目录，`--unload-plugins` 在命令结束后卸载已加载插件。
+
+编写新插件：在类库中引用 `DbChronicle.Cli`，给静态类标 `[DbChroniclePlugin(Name = "...")]`，实现 `public static void Initialize(IPluginRegistry registry)`，在其中 `AddExecutor` / `AddSourceScanner` / `AddCodeGenerator` / `AddCommand`，然后把 dll 放进 `plugins/`。
+
 ## 核心约定
 
 - **逻辑模型是唯一事实来源**：`migrations/*.xml` 只写「改什么」，不写物理类型与方言语法。
@@ -88,6 +150,9 @@ Src/
 Test/
   samples/                    示例工程（配置 + 基线 + 增量）
   DbChronicle.Demo/           可运行演示（MySQL / PostgreSQL）
+Tools/
+  publish.ps1                 zip 发布（基础包 + 按需插件组合，支持自包含）
+  pack.ps1                    NuGet 变体包（Cli / Cli.AdoNet / Cli.All）
 Docs/
   DbChronicle — 数据库版本托管与升级工具集 方案文档.md
   ci/github-actions.yml       CI 模板

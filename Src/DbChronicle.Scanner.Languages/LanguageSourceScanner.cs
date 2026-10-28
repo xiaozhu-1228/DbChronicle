@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 
+using DbChronicle.Cli.Plugins;
 using DbChronicle.Models;
 
 namespace DbChronicle.Scanner.Languages
@@ -9,8 +10,19 @@ namespace DbChronicle.Scanner.Languages
     /// 多语言源码扫描分派：按语言或按目录里的文件扩展名自动选择扫描器。
     /// `auto` 模式下同一目录可混合多种语言，结果合并。
     /// </summary>
-    public sealed class LanguageSourceScanner
+    public sealed class LanguageSourceScanner : ISourceScanner
     {
+        public string Language
+        {
+            get { return "auto"; }
+        }
+
+        /// <summary>插件契约入口：等价于 <c>ScanDirectory(directory, "auto")</c>。</summary>
+        public ScanResult ScanDirectory(string directory)
+        {
+            return ScanDirectory(directory, "auto");
+        }
+
         public ScanResult ScanDirectory(string directory, string language)
         {
             if (string.IsNullOrEmpty(directory) || !Directory.Exists(directory))

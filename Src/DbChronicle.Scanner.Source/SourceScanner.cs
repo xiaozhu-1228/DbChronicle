@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 
+using DbChronicle.Cli.Plugins;
 using DbChronicle.Common.Enums;
 using DbChronicle.Models;
 using Microsoft.CodeAnalysis.CSharp;
@@ -14,8 +15,19 @@ namespace DbChronicle.Scanner.Source
     /// C# 源码扫描（Roslyn）：直接从 .cs 文件识别实体类与属性，生成基线草案。
     /// 相比程序集反射，无需先编译；代价是无法获得运行时类型信息（泛型、继承链上的特性需人工确认）。
     /// </summary>
-    public sealed class SourceScanner
+    public sealed class SourceScanner : ISourceScanner
     {
+        public string Language
+        {
+            get { return "csharp"; }
+        }
+
+        /// <summary>插件契约入口（与带 searchPattern 的重载区分）。</summary>
+        ScanResult ISourceScanner.ScanDirectory(string directory)
+        {
+            return ScanDirectory(directory);
+        }
+
         private static readonly HashSet<string> EntityAttributes = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
             "Table", "TableAttribute", "TableName", "TableNameAttribute", "Entity", "EntityAttribute"

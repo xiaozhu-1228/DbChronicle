@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Text.RegularExpressions;
 
+using DbChronicle.Cli.Plugins;
 using DbChronicle.Common.Enums;
 using DbChronicle.Models;
 
@@ -11,8 +12,13 @@ namespace DbChronicle.Scanner.Languages
     /// Go 实体扫描：struct 定义 + `db:"列名"` tag。
     /// 只识别带 db tag 的导出字段（没有 tag 的字段视为非持久化字段）。
     /// </summary>
-    public sealed class GoSourceScanner
+    public sealed class GoSourceScanner : ISourceScanner
     {
+        public string Language
+        {
+            get { return "go"; }
+        }
+
         private static readonly Regex StructPattern = new Regex(
             @"type\s+(?<name>\w+)\s+struct\s*\{(?<body>[^{}]*)\}",
             RegexOptions.Compiled | RegexOptions.Singleline);

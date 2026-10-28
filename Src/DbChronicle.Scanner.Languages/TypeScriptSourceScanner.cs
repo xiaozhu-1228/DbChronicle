@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Text.RegularExpressions;
 
+using DbChronicle.Cli.Plugins;
 using DbChronicle.Common.Enums;
 using DbChronicle.Models;
 
@@ -11,8 +12,13 @@ namespace DbChronicle.Scanner.Languages
     /// TypeScript 实体扫描：支持 `export interface X { id: number }` 与 TypeORM 风格
     /// `@Entity('t') class X { @Column({ name: 'c' }) id: number }` 两种写法。
     /// </summary>
-    public sealed class TypeScriptSourceScanner
+    public sealed class TypeScriptSourceScanner : ISourceScanner
     {
+        public string Language
+        {
+            get { return "typescript"; }
+        }
+
         private static readonly Regex EntityDecoratorPattern = new Regex(
             @"@Entity\s*\(\s*(?:name\s*:\s*)?['""](?<name>[^'""]+)['""]", RegexOptions.Compiled);
 

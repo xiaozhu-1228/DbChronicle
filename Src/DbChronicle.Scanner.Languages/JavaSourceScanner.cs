@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Text.RegularExpressions;
 
+using DbChronicle.Cli.Plugins;
 using DbChronicle.Common.Enums;
 using DbChronicle.Models;
 
@@ -12,8 +13,13 @@ namespace DbChronicle.Scanner.Languages
     /// Java 实体扫描（JPA 风格注解）：@Table / @Column / @Id / @MaxLength / @Transient。
     /// 轻量行扫描，不做完整语法分析；复杂继承与常量引用需人工确认。
     /// </summary>
-    public sealed class JavaSourceScanner
+    public sealed class JavaSourceScanner : ISourceScanner
     {
+        public string Language
+        {
+            get { return "java"; }
+        }
+
         private static readonly Regex ClassPattern = new Regex(
             @"(?:public\s+)?(?:final\s+)?class\s+(?<name>\w+)", RegexOptions.Compiled);
 
