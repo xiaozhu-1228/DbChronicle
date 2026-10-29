@@ -26,20 +26,50 @@ namespace DbChronicle.Cli
     {
         public static int Scan(CliArguments args)
         {
-            var assemblyPath = args.Get("assembly", null);
-            var sourcePath = args.Get("source", null);
-            if (string.IsNullOrEmpty(assemblyPath) && string.IsNullOrEmpty(sourcePath))
+            var from = (args.Get("from", null) ?? "").Trim().ToLowerInvariant();
+            if (from == "database" || from == "db")
             {
-                throw new CliFailureException(ExitCodes.Usage, "缺少 --assembly 或 --source 参数");
+                return ScanDatabase(args);
             }
 
-            var output = args.Get("out", Path.Combine("migrations", "00000000_000000_baseline.xml"));
+            if (from.Length > 0 && from != "assembly" && from != "source")
+            {
+                throw new CliFailureException(ExitCodes.Usage,
+                    "未知的 --from 取值：" + from + "（可选：source / assembly / database）");
+            }
+
+            var assemblyPath = args.Get("assembly", null);
+            var sourcePath = args.Get("source", null);
+
+            if (from == "assembly" && string.IsNullOrEmpty(assemblyPath))
+            {
+                throw new CliFailureException(ExitCodes.Usage, "--from assembly 需要 --assembly <dll> 参数");
+            }
+
+            if (from == "source" && string.IsNullOrEmpty(sourcePath))
+            {
+                throw new CliFailureException(ExitCodes.Usage, "--from source 需要 --source <dir> 参数");
+            }
+
+            if (string.IsNullOrEmpty(assemblyPath) && string.IsNullOrEmpty(sourcePath))
+            {
+                throw new CliFailureException(ExitCodes.Usage,
+                    "缺少 --assembly / --source 参数（扫描数据库请用 --from database）");
+            }
+
+            var useAssembly = !string.IsNullOrEmpty(assemblyPath);
+            if (from == "source")
+            {
+                useAssembly = false;
+            }
+
+            var output = ResolveOutputPath(args, "output-file", Path.Combine("migrations", "00000000_000000_baseline.xml"));
 
             ScanResult result;
             string sourceLabel;
             try
             {
-                if (!string.IsNullOrEmpty(assemblyPath))
+                if (useAssembly)
                 {
                     if (!File.Exists(assemblyPath))
                     {
@@ -56,7 +86,7 @@ namespace DbChronicle.Cli
                         throw new CliFailureException(ExitCodes.Usage, "源码目录不存在：" + sourcePath);
                     }
 
-                    var language = (args.Get("lang", "csharp") ?? "csharp").Trim().ToLowerInvariant();
+                    var language = (args.Get("language", null) ?? args.Get("lang", "csharp") ?? "csharp").Trim().ToLowerInvariant();
                     if (language == "csharp" || language == "c#")
                     {
                         result = Host.ResolveSourceScanner("csharp").ScanDirectory(fullSource);
@@ -108,8 +138,8 @@ namespace DbChronicle.Cli
         public static int GenerateCode(CliArguments args)
         {
             var config = LoadConfig(args);
-            var language = args.Get("lang", "csharp");
-            var output = args.Get("out", "Entities");
+            var language = args.Get("language", null) ?? args.Get("lang", "csharp");
+            var output = ResolveOutputPath(args, "output-dir", "Entities");
             var ns = args.Get("namespace", "Entities");
 
             var units = new ChangeUnitLoader(config).LoadAll();
@@ -148,12 +178,12 @@ namespace DbChronicle.Cli
         public static int ScanDatabase(CliArguments args)
         {
             var config = LoadConfig(args);
-            var output = args.Get("out", Path.Combine("migrations", "00000000_000000_baseline.xml"));
+            var output = ResolveOutputPath(args, "output-file", Path.Combine("migrations", "00000000_000000_baseline.xml"));
             var connection = ConnectionResolver.Resolve(config);
 
             var options = new ScanDatabaseOptions();
-            AddList(options.Tables, args.Get("tables", null));
-            AddList(options.ExcludeTables, args.Get("exclude", null));
+            AddList(options.Tables, args.Get("include-tables", null) ?? args.Get("tables", null));
+            AddList(options.ExcludeTables, args.Get("exclude-tables", null) ?? args.Get("exclude", null));
             options.IncludeIndexes = !args.Has("no-indexes");
             options.IncludeForeignKeys = !args.Has("no-foreign-keys");
             options.IncludeCheckConstraints = !args.Has("no-check-constraints");
@@ -169,7 +199,7 @@ namespace DbChronicle.Cli
                     result = scanner.Scan(options);
                     if (result.Tables.Count == 0)
                     {
-                        Console.Error.WriteLine("未扫描到任何表（检查 --tables / --exclude 与库中是否有业务表）");
+                        Console.Error.WriteLine("未扫描到任何表（检查 --include-tables / --exclude-tables 与库中是否有业务表）");
                         return ExitCodes.Usage;
                     }
 

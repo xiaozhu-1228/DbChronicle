@@ -1,3 +1,4 @@
+#if !NETFRAMEWORK
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -85,3 +86,4 @@ namespace DbChronicle.Cli.Plugins.Loading
         }
     }
 }
+#endif

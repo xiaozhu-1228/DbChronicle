@@ -246,10 +246,10 @@ namespace DbChronicle.Cli
         public static int Rollback(CliArguments args)
         {
             var config = LoadConfig(args);
-            var target = args.Get("to-release", null);
+            var target = args.Get("target-release", null) ?? args.Get("to-release", null);
             if (string.IsNullOrEmpty(target))
             {
-                throw new CliFailureException(ExitCodes.Usage, "缺少 --to-release 参数");
+                throw new CliFailureException(ExitCodes.Usage, "缺少 --target-release 参数");
             }
 
             var units = new ChangeUnitLoader(config).LoadAll();

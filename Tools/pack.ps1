@@ -50,7 +50,8 @@ foreach ($variant in $variants) {
     Write-Host ("== 打包 " + $variant.Id + " ==") -ForegroundColor Cyan
     $packArgs = @(
         "pack", $cliProject, "-c", $Configuration, "-o", $outDir,
-        "--nologo", "-v", "q"
+        "--nologo", "-v", "q",
+        "-p:ToolPack=true"
     )
     $packArgs += $variant.Extra
     & dotnet @packArgs

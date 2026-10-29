@@ -138,21 +138,28 @@ namespace DbChronicle.Tests
         }
 
         [Fact]
-        public void Slugify_ShouldProduceSnakeCase()
-        {
-            Assert.Equal("add_phone_to_nor_user", ChangeUnitFactory.Slugify("add phone to nor_user"));
-            Assert.Equal("change", ChangeUnitFactory.Slugify("   "));
-        }
-
-        [Fact]
         public void Factory_ShouldCreateFileWithStandardName()
         {
             var directory = TestSupport.CreateMigrationsDirectory();
             var path = ChangeUnitFactory.Create(directory, "add phone", "20261022", "tester");
             var name = Path.GetFileName(path);
+            var text = File.ReadAllText(path);
 
-            Assert.Matches(@"^\d{8}_\d{6}_[0-9a-f]{6}_add_phone\.xml$", name);
-            Assert.Contains("add phone", File.ReadAllText(path));
+            Assert.Matches(@"^\d{8}_\d{6}\.xml$", name);
+            Assert.Contains("add phone", text);
+            Assert.Contains("release=\"20261022\"", text);
+            Assert.Contains("id=\"" + name.Substring(0, name.Length - 4) + "\"", text);
+        }
+
+        [Fact]
+        public void Factory_ShouldNeverOverwriteWhenCalledTwice()
+        {
+            var directory = TestSupport.CreateMigrationsDirectory();
+            var first = ChangeUnitFactory.Create(directory, "add phone", "20261022", "tester");
+            var second = ChangeUnitFactory.Create(directory, "add phone", "20261022", "tester");
+
+            Assert.NotEqual(first, second);
+            Assert.Equal(2, Directory.GetFiles(directory, "*.xml").Length);
         }
     }
 }

@@ -55,7 +55,7 @@ namespace DbChronicle.Cli
                 config.Database.Version = DefaultVersionOf(config.Database.Dialect);
             }
 
-            var version = args.Get("version", null);
+            var version = args.Get("db-version", null) ?? args.Get("version", null);
             if (!string.IsNullOrEmpty(version))
             {
                 config.Database.Version = version;
@@ -77,10 +77,10 @@ namespace DbChronicle.Cli
         public static int New(CliArguments args)
         {
             var config = LoadConfig(args);
-            var description = args.Get("desc", null);
+            var description = args.Get("description", null) ?? args.Get("desc", null);
             if (string.IsNullOrEmpty(description))
             {
-                throw new CliFailureException(ExitCodes.Usage, "缺少 --desc 参数");
+                throw new CliFailureException(ExitCodes.Usage, "缺少 --description 参数");
             }
 
             var path = ChangeUnitFactory.Create(config.ResolveMigrationsPath(), description,
@@ -138,6 +138,35 @@ namespace DbChronicle.Cli
 
         private static DbChronicleConfig LoadConfig(CliArguments args)
         {
+            var config = LoadConfigFromFile(args);
+            ApplyConfigOverrides(config, args);
+            return config;
+        }
+
+        /// <summary>命令行覆盖配置里的方言与数据库版本（一份配置可服务多种库）。</summary>
+        private static void ApplyConfigOverrides(DbChronicleConfig config, CliArguments args)
+        {
+            var dialect = args.Get("dialect", null);
+            if (!string.IsNullOrEmpty(dialect))
+            {
+                var normalized = dialect.Trim().ToLowerInvariant();
+                if (!DialectFactory.IsSupported(normalized))
+                {
+                    throw new CliFailureException(ExitCodes.Usage,
+                        "不支持的方言：" + dialect + "（可选：" + string.Join(" / ", DialectFactory.SupportedDialects) + "）");
+                }
+                config.Database.Dialect = normalized;
+            }
+
+            var version = args.Get("db-version", null);
+            if (!string.IsNullOrEmpty(version))
+            {
+                config.Database.Version = version.Trim();
+            }
+        }
+
+        private static DbChronicleConfig LoadConfigFromFile(CliArguments args)
+        {
             var explicitPath = args.Has("config");
             var path = args.Get("config", ConfigLoader.DefaultFileName);
             if (File.Exists(path))
@@ -155,6 +184,18 @@ namespace DbChronicle.Cli
             ConfigLoader.Save(created, path);
             Console.WriteLine("未找到配置文件，已生成默认配置：" + created.ConfigPath + "（可用 db-chronicle init --dialect <name> 调整方言）");
             return created;
+        }
+
+        /// <summary>输出位置：新参数（--output-dir / --output-file）优先，兼容旧的 --out。</summary>
+        private static string ResolveOutputPath(CliArguments args, string name, string fallback)
+        {
+            var value = args.Get(name, null);
+            if (string.IsNullOrEmpty(value))
+            {
+                value = args.Get("out", null);
+            }
+
+            return string.IsNullOrEmpty(value) ? fallback : value;
         }
 
         private static void PrintDiagnostics(IEnumerable<CompileDiagnostic> diagnostics)

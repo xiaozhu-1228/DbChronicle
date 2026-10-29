@@ -7,3 +7,4 @@ version_log/
 output/
 *.user
 packages.txt
+.codegraph*

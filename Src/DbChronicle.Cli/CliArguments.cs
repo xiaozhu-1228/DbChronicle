@@ -9,6 +9,11 @@ namespace DbChronicle.Cli
 
         public List<string> Positionals { get; } = new List<string>();
 
+        public IEnumerable<string> Names
+        {
+            get { return new List<string>(_values.Keys); }
+        }
+
         public static CliArguments Parse(string[] args)
         {
             var result = new CliArguments();

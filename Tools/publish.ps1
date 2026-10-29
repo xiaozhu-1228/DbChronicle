@@ -26,10 +26,15 @@ param(
     [string[]]$Plugins = @("adonet"),
     [switch]$SelfContained,
     [string]$Runtime = "win-x64",
+    [string]$Framework = "net8.0",
     [string]$Configuration = "Release"
 )
 
 $ErrorActionPreference = "Stop"
+
+if ($SelfContained -and $Framework -like "net4*") {
+    throw "net48 目标不支持自包含发布，请改用 -Framework net8.0 或去掉 -SelfContained"
+}
 
 $root = Split-Path -Parent $PSScriptRoot
 $outDir = if ([System.IO.Path]::IsPathRooted($Output)) { $Output } else { Join-Path $root $Output }
@@ -55,6 +60,10 @@ foreach ($name in $Plugins) {
 }
 $selected = $selected | Select-Object -Unique
 
+if ($Framework -like "net4*" -and $selected.Count -gt 0) {
+    Write-Warning "插件只按 net8.0 构建，net48 宿主无法加载；需要插件请改用 -Framework net8.0"
+}
+
 Write-Host "== 发布 db-chronicle ==" -ForegroundColor Cyan
 Write-Host "  输出目录 : $outDir"
 Write-Host "  插件     : $(if ($selected.Count -eq 0) { '（无，仅离线能力）' } else { $selected -join ', ' })"
@@ -63,7 +72,7 @@ Write-Host ""
 
 # 1) 发布 CLI（基础包）
 $publishArgs = @("publish", (Join-Path $root "Src/DbChronicle.Cli/DbChronicle.Cli.csproj"),
-    "-c", $Configuration, "-o", $outDir, "--nologo", "-v", "q")
+    "-c", $Configuration, "-o", $outDir, "-f", $Framework, "--nologo", "-v", "q")
 if ($SelfContained) {
     $publishArgs += @("-r", $Runtime, "--self-contained", "true")
 }

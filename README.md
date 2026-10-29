@@ -10,62 +10,65 @@
 | `DbChronicle.Cli` | 命令行工具（`db-chronicle`，dotnet tool）：**命令宿主**，能力按需插件化（插件契约也在本程序集内） |
 | `DbChronicle.Executor.AdoNet` | 插件：ADO.NET 执行器与库级锁（MySqlConnector / Npgsql / SqlClient / Sqlite） |
 | `DbChronicle.Executor.EfCore` | 插件（应用内嵌）：EF Core 执行器，复用宿主 `DbContext` |
-| `DbChronicle.Scanner.Source` | 插件：C# 源码扫描（Roslyn，`scan --source --lang csharp`） |
+| `DbChronicle.Scanner.Source` | 插件：C# 源码扫描（Roslyn，`scan --from source --language csharp`） |
 | `DbChronicle.Scanner.Languages` | 插件：Java / Go / TypeScript 源码扫描 |
 
 ## 快速开始
 
 ```powershell
 # 初始化（生成 DbchronicleConfig.xml 与 migrations / version_log / output 目录）
-dotnet run --project Src/DbChronicle.Cli -- init --dialect mysql
+dotnet run --project Src/DbChronicle.Cli -f net8.0 -- init --dialect mysql
 
 # 生成变更单元（文件名、id、作者、release 自动生成，绝不覆盖同名文件）
-dotnet run --project Src/DbChronicle.Cli -- new --desc "add phone to nor_user"
+dotnet run --project Src/DbChronicle.Cli -f net8.0 -- new --description "add phone to nor_user"
 
 # 编译（离线，不连数据库）
-dotnet run --project Src/DbChronicle.Cli -- compile --config DbchronicleConfig.xml
-dotnet run --project Src/DbChronicle.Cli -- compile --config DbchronicleConfig.xml --all-dialects
+dotnet run --project Src/DbChronicle.Cli -f net8.0 -- compile --config DbchronicleConfig.xml
+dotnet run --project Src/DbChronicle.Cli -f net8.0 -- compile --config DbchronicleConfig.xml --all-dialects
+
+# 编译成「每行一条语句」的文件，交给外部程序（C++ / Java）逐行执行
+dotnet run --project Src/DbChronicle.Cli -f net8.0 -- compile --config DbchronicleConfig.xml --split --output-dir ./output
 
 # 语义检查（重复 ADD / MODIFY 冲突 / DROP 不存在列 / 跨单元顺序 …）
-dotnet run --project Src/DbChronicle.Cli -- check --config DbchronicleConfig.xml --strict-warnings
+dotnet run --project Src/DbChronicle.Cli -f net8.0 -- check --config DbchronicleConfig.xml --strict-warnings
 
 # 应用（连接信息通过 DBCHRONICLE_CONN 环境变量或交互式输入）
 $env:DBCHRONICLE_CONN = "Server=localhost;Port=3306;Database=mydb;User ID=root;Password=***"
-dotnet run --project Src/DbChronicle.Cli -- upgrade --config DbchronicleConfig.xml   # 别名：apply
+dotnet run --project Src/DbChronicle.Cli -f net8.0 -- upgrade --config DbchronicleConfig.xml   # 别名：apply
 
 # 其他常用选项：--dry-run 只打印 SQL / --restart 清空断点重跑 / --continue-on-error 失败后继续其余单元
 #               --check-drift 先比对库结构与模型 / --backfill-logs 补生成审计日志
 #               --mark-applied <id> 手工标记已应用
-dotnet run --project Src/DbChronicle.Cli -- upgrade --config DbchronicleConfig.xml --dry-run
+dotnet run --project Src/DbChronicle.Cli -f net8.0 -- upgrade --config DbchronicleConfig.xml --dry-run
 
 # 状态 / 校验（读本地 version_log 状态文件，无需连库）
-dotnet run --project Src/DbChronicle.Cli -- status --config DbchronicleConfig.xml
-dotnet run --project Src/DbChronicle.Cli -- verify --config DbchronicleConfig.xml
+dotnet run --project Src/DbChronicle.Cli -f net8.0 -- status --config DbchronicleConfig.xml
+dotnet run --project Src/DbChronicle.Cli -f net8.0 -- verify-checksum --config DbchronicleConfig.xml
 
-# 反向工程：从数据库现有结构生成基线草案（5 方言，只读）
-dotnet run --project Src/DbChronicle.Cli -- scan-db --out migrations/00000000_000000_baseline.xml
+# 反向工程：从数据库现有结构生成基线草案（5 方言，只读；scan-db 是它的别名）
+dotnet run --project Src/DbChronicle.Cli -f net8.0 -- scan --from database --output-file migrations/00000000_000000_baseline.xml
 
-# 反向工程：从源码生成基线草案（--lang csharp|java|go|typescript|auto）
-dotnet run --project Src/DbChronicle.Cli -- scan --source ./src --lang csharp --out migrations/00000000_000000_baseline.xml
+# 反向工程：从源码生成基线草案（--language csharp|java|go|typescript|auto）
+dotnet run --project Src/DbChronicle.Cli -f net8.0 -- scan --from source --source ./src --language csharp --output-file migrations/00000000_000000_baseline.xml
 
 # 反向工程：从编译后的程序集生成基线草案
-dotnet run --project Src/DbChronicle.Cli -- scan --assembly ./bin/App.dll --out migrations/00000000_000000_baseline.xml
+dotnet run --project Src/DbChronicle.Cli -f net8.0 -- scan --from assembly --assembly ./bin/App.dll --output-file migrations/00000000_000000_baseline.xml
 
 # 代码生成：由 migrations 生成实体（C# / Java / Go / TypeScript / C++）
-dotnet run --project Src/DbChronicle.Cli -- codegen --lang csharp --out ./Entities --namespace MyApp.Entities
-dotnet run --project Src/DbChronicle.Cli -- codegen --lang cpp --out ./cpp-entities --namespace myapp::entities
+dotnet run --project Src/DbChronicle.Cli -f net8.0 -- codegen --language csharp --output-dir ./Entities --namespace MyApp.Entities
+dotnet run --project Src/DbChronicle.Cli -f net8.0 -- codegen --language cpp --output-dir ./cpp-entities --namespace myapp::entities
 ```
 
 退出码：`0` 成功、`1` 参数/校验失败、`2` 有待应用变更（仅 `status`）、`3` 执行/校验失败、`4` 未取得库级锁、`5` 环境问题（连接失败、非交互环境缺连接信息）。
 
 ## 插件与按需部署
 
-CLI 是命令宿主：核心命令（`init` / `new` / `compile` / `check` / `status` / `verify` / `rollback` / `codegen` / `scan --assembly`）**不需要任何插件**；只有在需要数据库执行或源码扫描时，才加载对应的那一个插件 dll。
+CLI 是命令宿主：核心命令（`init` / `new` / `compile` / `check` / `status` / `verify-checksum` / `rollback` / `codegen` / `scan --from assembly`）**不需要任何插件**；只有在需要数据库执行或源码扫描时，才加载对应的那一个插件 dll。
 
 | 能力 | 提供者 | 缺失时 |
 | --- | --- | --- |
-| 数据库执行（`upgrade` / `scan-db` / `rollback --apply`） | `DbChronicle.Executor.AdoNet.dll` | 退出码 **6** + "请把 … 部署到 plugins 目录" |
-| C# 源码扫描（`scan --source --lang csharp`） | `DbChronicle.Scanner.Source.dll`（含 Roslyn） | 同上 |
+| 数据库执行（`upgrade` / `scan --from database` / `rollback --apply`） | `DbChronicle.Executor.AdoNet.dll` | 退出码 **6** + "请把 … 部署到 plugins 目录" |
+| C# 源码扫描（`scan --from source --language csharp`） | `DbChronicle.Scanner.Source.dll`（含 Roslyn） | 同上 |
 | Java / Go / TS 源码扫描 | `DbChronicle.Scanner.Languages.dll` | 同上 |
 
 ### 分发方式一：dotnet tool（NuGet）
@@ -73,7 +76,7 @@ CLI 是命令宿主：核心命令（`init` / `new` / `compile` / `check` / `sta
 ```powershell
 # 三个变体包，按需选一个装
 dotnet tool install -g DbChronicle.Cli           # 无插件，约 0.18 MB（只要 compile/check/status/codegen）
-dotnet tool install -g DbChronicle.Cli.AdoNet    # +执行器，约 17 MB（追加 upgrade/scan-db）
+dotnet tool install -g DbChronicle.Cli.AdoNet    # +执行器，约 17 MB（追加 upgrade / scan --from database）
 dotnet tool install -g DbChronicle.Cli.All       # 全量，约 22 MB（装完即用，可关掉不用的）
 
 # 生成本地包
@@ -95,6 +98,7 @@ db-chronicle plugin enable scanner-source
 ./Tools/publish.ps1 -Output dist -Plugins adonet # 带数据库执行能力
 ./Tools/publish.ps1 -Output dist -Plugins all    # 全量
 ./Tools/publish.ps1 -Output dist -Plugins adonet -SelfContained  # 目标机无需 .NET 运行时
+./Tools/publish.ps1 -Output dist -Plugins @() -Framework net48    # 目标机只有 .NET Framework 4.8（离线能力）
 ```
 
 两种方式的产物目录结构相同（**每个插件独占子目录**，删/禁用互不影响）：
@@ -124,6 +128,7 @@ dist/  （或 tool 的 tools/net8.0/any/）
 - **状态本地化**：已应用记录与语句级续跑进度都在 `version_log/{environment}/DbchronicleState.xml`，不建版本表。
 - **审计留档**：`version_log/{environment}/{release}_dbupdate.md` + `sql/{release}/{change_id}.{dialect}.sql` 快照。
 - **执行安全**：整单元事务（PG / SQL Server / SQLite）或语句级续跑（MySQL / MariaDB）；库级互斥锁防并发 upgrade。`options.commitScope` 可改按表/按批提交（table / batch，配 `commitBatchSize`），断点记入状态文件；`--continue-on-error` 可在失败后继续其余单元并在结尾汇总。
+- **CLI 命名规范**：kebab-case、全拼无缩写、名词优先、正负对称；输出参数区分 `--output-dir`（目录）与 `--output-file`（文件）。改名一律保留旧名作隐藏别名，参数拼错会输出 `warning: 未知参数 --xxx（... 支持：...）`（详见方案文档 §8.6）。
 
 ## 目录
 
@@ -141,7 +146,7 @@ Src/
     Diagnostics/              诊断码
     Execution/                执行器契约（IDbExecutor / IDbLock 等）
     Embedded/                 宿主内嵌入口（DbChronicleFactory / IDbChronicle）
-  DbChronicle.Cli/            命令行（init / new / compile / check / upgrade / status / verify / scan / scan-db / codegen / rollback）
+  DbChronicle.Cli/            命令行（init / new / compile / check / upgrade / status / verify-checksum / scan / codegen / rollback）
   DbChronicle.Executor.AdoNet/  ADO.NET 执行器与库级锁（唯一带数据库驱动的工程）
   DbChronicle.Executor.EfCore/  EF Core 执行器（复用宿主 DbContext）
   DbChronicle.Scanner.Source/   Roslyn 源码扫描（scan 的 source 模式）
@@ -165,7 +170,19 @@ Docs/
 ```powershell
 dotnet build Src/DbChronicle.sln
 dotnet test Src/DbChronicle.sln
+
+# 只编某一个目标框架
+dotnet build Src/DbChronicle.Cli -f net48
 ```
+
+CLI 的目标框架为 `net48;net6.0;net8.0`：面向只有 .NET Framework 4.8 的部署机时用 `-f net48`。
+插件（执行器 / 源码扫描）仍只有 net8.0 产物，net48 宿主只能使用离线命令
+（init / new / compile / check / status / verify-checksum / rollback(dry-run) / codegen / scan --from assembly）；
+其中 `--unload-plugins` 在 net48 下不生效（没有可卸载的 AssemblyLoadContext），
+`scan --from assembly` 只能反射 .NET Framework 程序集（net6/net8 程序集请用 net8.0 产物扫描）。
+net48 目标不生成 `app.config`（`supportedRuntime` 声明会让 exe 在部分机器上以 side-by-side 配置错误启动失败）。
+`dotnet run` / `dotnet publish` 在多目标下必须带 `-f`（本文命令统一用 `-f net8.0`）；
+非 Windows 环境用 `-p:NoNetFx=true` 跳过 net48 目标（Linux/macOS 没有 .NET Framework 引用程序集）。
 
 可运行演示（Demo 只依赖核心库 + 执行器库，与 CLI 无关）：
 

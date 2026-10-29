@@ -7,6 +7,9 @@ namespace DbChronicle.Models.Operations
         public string Table { get; set; } = "";
         public OperationStage Stage { get; set; } = OperationStage.After;
 
+        /// <summary>是否显式写了 stage 属性（显式设置时不参与 rawSql 的语义推断）。</summary>
+        public bool StageSpecified { get; set; }
+
         /// <summary>table="*" 时的显式表清单（逗号分隔），用于固定范围。</summary>
         public string Tables { get; set; }
 

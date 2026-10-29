@@ -330,15 +330,56 @@ namespace DbChronicle.Compilation.Compiler
                     tableOrder[key] = i;
                 }
             }
+
+            // 表是第一排序键：一张表的全部操作执行完，才轮到下一张表；
+            // 表内再按操作类型（Rank）与书写顺序收敛。
+            // stage="before" 全局最前；rawSql 与无表名的操作排在所有表之后。
             return (from x in operations.Select((SchemaOperation operation, int index) => new
             {
                 Operation = operation,
                 Index = index,
-                Rank = Rank(operation),
-                TableIndex = tableOrder[operation.Table ?? ""]
+                TableIndex = TableSlot(operation, tableOrder),
+                Rank = Rank(operation)
             })
-                    orderby x.Rank, x.TableIndex, x.Index
+                    orderby x.TableIndex, x.Rank, x.Index
                     select x.Operation).ToList();
+        }
+
+        private static bool IsBeforeStage(SchemaOperation operation)
+        {
+            if (operation is RawSqlOperation rawSqlOperation)
+            {
+                return rawSqlOperation.StageSpecified && rawSqlOperation.Stage == OperationStage.Before;
+            }
+
+            return operation.Stage == OperationStage.Before;
+        }
+
+        /// <summary>
+        /// 排序槽位：-1 = 提到所有表之前（stage=before、建序列），int.MaxValue = 所有表之后（rawSql、删序列），
+        /// 其余按表首次出现顺序。
+        /// </summary>
+        private static int TableSlot(SchemaOperation operation, Dictionary<string, int> tableOrder)
+        {
+            if (IsBeforeStage(operation))
+            {
+                return -1;
+            }
+
+            var sequence = operation as SequenceOperation;
+            if (sequence != null)
+            {
+                // 建序列可能被建表的 DEFAULT nextval 引用，必须最先；删序列最后
+                return sequence.Action == ObjectAction.Drop ? int.MaxValue : -1;
+            }
+
+            if (operation is RawSqlOperation || string.IsNullOrEmpty(operation.Table))
+            {
+                return int.MaxValue;
+            }
+
+            int slot;
+            return tableOrder.TryGetValue(operation.Table, out slot) ? slot : int.MaxValue;
         }
 
         private static int Rank(SchemaOperation operation)
@@ -349,7 +390,12 @@ namespace DbChronicle.Compilation.Compiler
             }
             if (operation is RawSqlOperation rawSqlOperation)
             {
-                return (rawSqlOperation.Stage != 0) ? 50 : 0;
+                if (rawSqlOperation.StageSpecified)
+                {
+                    return (rawSqlOperation.Stage == OperationStage.Before) ? 0 : 50;
+                }
+
+                return InferRawSqlRank(rawSqlOperation);
             }
             if (operation is DataMigrationOperation dataMigrationOperation)
             {
@@ -440,6 +486,110 @@ namespace DbChronicle.Compilation.Compiler
                 return (sequenceOperation.Action == ObjectAction.Drop) ? 37 : 18;
             }
             return 50;
+        }
+
+        /// <summary>按首个关键字推断 rawSql 的操作类别；识别不了就保持"最后执行"。</summary>
+        private static int InferRawSqlRank(RawSqlOperation operation)
+        {
+            string sql;
+            if (!operation.SqlByDialect.TryGetValue("any", out sql))
+            {
+                sql = operation.SqlByDialect.Values.FirstOrDefault();
+            }
+
+            if (string.IsNullOrEmpty(sql))
+            {
+                return 50;
+            }
+
+            string text = SkipLeadingComments(sql);
+            if (text.Length > 512)
+            {
+                text = text.Substring(0, 512);
+            }
+
+            string head = text.ToUpperInvariant();
+
+            if (head.StartsWith("INSERT", StringComparison.Ordinal)
+                || head.StartsWith("UPDATE", StringComparison.Ordinal)
+                || head.StartsWith("DELETE", StringComparison.Ordinal)
+                || head.StartsWith("MERGE", StringComparison.Ordinal)
+                || head.StartsWith("REPLACE", StringComparison.Ordinal)
+                || head.StartsWith("TRUNCATE", StringComparison.Ordinal))
+            {
+                return 40;
+            }
+
+            if (head.StartsWith("DROP INDEX", StringComparison.Ordinal))
+            {
+                return 11;
+            }
+
+            if (head.StartsWith("CREATE INDEX", StringComparison.Ordinal)
+                || head.StartsWith("CREATE UNIQUE", StringComparison.Ordinal))
+            {
+                return 30;
+            }
+
+            if (head.StartsWith("DROP TABLE", StringComparison.Ordinal))
+            {
+                return 17;
+            }
+
+            if (head.StartsWith("ALTER TABLE", StringComparison.Ordinal))
+            {
+                if (head.Contains("FOREIGN KEY"))
+                {
+                    return 31;
+                }
+
+                if (head.Contains("INDEX") || head.Contains("KEY"))
+                {
+                    return 30;
+                }
+
+                return 24;
+            }
+
+            if (head.StartsWith("CREATE TABLE", StringComparison.Ordinal))
+            {
+                return 20;
+            }
+
+            return 50;
+        }
+
+        private static string SkipLeadingComments(string sql)
+        {
+            string text = sql.TrimStart();
+            while (text.Length > 0)
+            {
+                if (text.StartsWith("--", StringComparison.Ordinal))
+                {
+                    int index = text.IndexOf('\n');
+                    if (index < 0)
+                    {
+                        return "";
+                    }
+                    text = text.Substring(index + 1).TrimStart();
+                    continue;
+                }
+
+                if (text.StartsWith("/*", StringComparison.Ordinal))
+                {
+                    int end = text.IndexOf("*/", StringComparison.Ordinal);
+                    if (end < 0)
+                    {
+                        return "";
+                    }
+                    text = text.Substring(end + 2).TrimStart();
+                    continue;
+                }
+
+                return text;
+            }
+
+            return text;
         }
 
         private string Dispatch(SchemaOperation operation)

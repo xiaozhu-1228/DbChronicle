@@ -2,17 +2,44 @@
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>net8.0</TargetFramework>
+    <TargetFrameworks>net48;net6.0;net8.0</TargetFrameworks>
     <LangVersion>latest</LangVersion>
     <Nullable>disable</Nullable>
     <RootNamespace>DbChronicle.Cli</RootNamespace>
     <AssemblyName>db-chronicle</AssemblyName>
+    <Version>1.0.0</Version>
+    <Description>数据库版本托管与升级工具集</Description>
+  </PropertyGroup>
+
+  <!--
+    net48 不生成 app.config：SDK 默认写入的 supportedRuntime(sku=.NETFramework,Version=v4.8)
+    会让 exe 在部分机器上以 side-by-side 配置错误启动失败；本工具零第三方依赖，不需要 binding redirect。
+  -->
+  <!-- Linux/macOS 没有 .NET Framework 引用程序集：CI 用 -p:NoNetFx=true 跳过 net48 -->
+  <PropertyGroup Condition="'$(NoNetFx)' == 'true'">
+    <TargetFrameworks>net6.0;net8.0</TargetFrameworks>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(TargetFramework)' == 'net48'">
+    <AutoGenerateBindingRedirects>false</AutoGenerateBindingRedirects>
+    <GenerateBindingRedirectsOutputType>false</GenerateBindingRedirectsOutputType>
+    <GenerateSupportedRuntime>false</GenerateSupportedRuntime>
+  </PropertyGroup>
+
+  <!-- net6.0 / net8.0 允许向上滚动到更高主版本运行时（只装了 .NET 8 的机器也能跑 net6.0 产物） -->
+  <PropertyGroup Condition="'$(TargetFramework)' != 'net48'">
     <RollForward>Major</RollForward>
+  </PropertyGroup>
+
+  <!--
+    dotnet tool 只支持单一目标框架：需要出 tool 包时 -p:ToolPack=true 把目标收窄为 net8.0。
+    多目标构建（默认）不打包，只产出三个 TFM 的可执行文件。
+  -->
+  <PropertyGroup Condition="'$(ToolPack)' == 'true'">
+    <TargetFrameworks>net8.0</TargetFrameworks>
     <PackAsTool>true</PackAsTool>
     <ToolCommandName>db-chronicle</ToolCommandName>
     <PackageId>DbChronicle.Cli</PackageId>
-    <Version>1.0.0</Version>
-    <Description>数据库版本托管与升级工具集</Description>
   </PropertyGroup>
 
   <ItemGroup>
@@ -44,8 +71,9 @@
     构建后把各插件输出（含第三方依赖与 runtimes 原生库）复制到 plugins/<插件名>/，
     供 PluginHost 按需加载。每个插件独占子目录：删/禁用整个目录不会波及别的能力。
     DestinationFiles + RecursiveDir 保留子目录，否则 SQLite 等原生库会因结构丢失而加载失败。
+    插件只按 net8.0 产出，其它 TFM 不复制。
   -->
-  <Target Name="CopyPluginOutputs" AfterTargets="Build">
+  <Target Name="CopyPluginOutputs" AfterTargets="Build" Condition="'$(TargetFramework)' == 'net8.0'">
     <!-- 清理早期扁平布局残留（plugins/*.dll 与 plugins/runtimes），否则会优先加载到旧版插件 -->
     <ItemGroup>
       <_StaleFlatPlugin Include="$(OutDir)plugins\*.dll" />
@@ -76,7 +104,7 @@
     NuGet 变体包：默认（DbChronicle.Cli）不含插件；
     -p:IncludeAdoNet=true 出 DbChronicle.Cli.AdoNet；-p:IncludeAll=true 出全量包。
     插件 dll 打进 tools/net8.0/any/plugins/<插件名>/，装完工具即可按需加载。
-    打包前必须先构建插件（见 Tools/pack.ps1）。
+    打包前必须先构建插件（见 Tools/pack.ps1），且必须 -p:ToolPack=true。
   -->
   <ItemGroup Condition="'$(IncludeAdoNet)' == 'true'">
     <None Include="..\DbChronicle.Executor.AdoNet\bin\$(Configuration)\net8.0\**\*.*"

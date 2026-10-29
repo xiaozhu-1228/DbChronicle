@@ -59,7 +59,7 @@ namespace DbChronicle.Cli
                 ? DialectFactory.SupportedDialects
                 : new[] { config.Database.Dialect };
 
-            var outputDirectory = args.Get("out", config.ResolveOutputPath());
+            var outputDirectory = ResolveOutputPath(args, "output-dir", config.ResolveOutputPath());
             Directory.CreateDirectory(outputDirectory);
             var hasError = false;
 

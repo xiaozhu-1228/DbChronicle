@@ -73,7 +73,7 @@ namespace DbChronicle.Cli.Tests
             var args = CliArguments.Parse(new[]
             {
                 "--config", Path.Combine(directory, ConfigLoader.DefaultFileName),
-                "--split", "--out", outputDirectory
+                "--split", "--output-dir", outputDirectory
             });
             Capture(() => Commands.Compile(args));
 
@@ -89,6 +89,27 @@ namespace DbChronicle.Cli.Tests
         }
 
         [Fact]
+        public void Compile_ShouldApplyDialectOverride()
+        {
+            var directory = CreateProject();
+            var outputDirectory = Path.Combine(directory, "pg-split");
+
+            var args = CliArguments.Parse(new[]
+            {
+                "--config", Path.Combine(directory, ConfigLoader.DefaultFileName),
+                "--split", "--output-dir", outputDirectory,
+                "--dialect", "postgresql"
+            });
+            Capture(() => Commands.Compile(args));
+
+            Assert.Equal(ExitCodes.Success, LastExit);
+
+            var file = Path.Combine(outputDirectory, "20261023_100000_a1b2c3.postgresql.sql");
+            Assert.True(File.Exists(file), "应按覆盖后的方言生成文件");
+            Assert.Contains("\"", File.ReadAllText(file));
+        }
+
+        [Fact]
         public void CompilePending_ShouldSkipAppliedUnits()
         {
             var directory = CreateProject();
@@ -100,7 +121,7 @@ namespace DbChronicle.Cli.Tests
             var outputDirectory = Path.Combine(directory, "pending-sql");
             var args = CliArguments.Parse(new[]
             {
-                "--config", configPath, "--pending", "--split", "--out", outputDirectory
+                "--config", configPath, "--pending", "--split", "--output-dir", outputDirectory
             });
             var output = Capture(() => Commands.Compile(args));
 
@@ -133,7 +154,7 @@ namespace DbChronicle.Cli.Tests
             var outputDirectory = Path.Combine(directory, "pending-only");
             var args = CliArguments.Parse(new[]
             {
-                "--config", configPath, "--pending", "--split", "--out", outputDirectory
+                "--config", configPath, "--pending", "--split", "--output-dir", outputDirectory
             });
             var output = Capture(() => Commands.Compile(args));
 

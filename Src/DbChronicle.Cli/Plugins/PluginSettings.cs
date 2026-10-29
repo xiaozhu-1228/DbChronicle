@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Text.Json;
+using System.Text;
 
 namespace DbChronicle.Cli.Plugins
 {
@@ -16,6 +16,7 @@ namespace DbChronicle.Cli.Plugins
     {
         private const string DirectoryName = "DbChronicle";
         private const string FileName = "settings.json";
+        private const string DisabledKey = "Disabled";
 
         /// <summary>被禁用的插件名（目录名，大小写无关）。</summary>
         public List<string> Disabled { get; set; } = new List<string>();
@@ -58,15 +59,15 @@ namespace DbChronicle.Cli.Plugins
                 if (File.Exists(SettingsPath))
                 {
                     var json = File.ReadAllText(SettingsPath);
-                    var settings = JsonSerializer.Deserialize<PluginSettings>(json);
-                    if (settings != null)
+                    var settings = new PluginSettings();
+                    foreach (var item in ParseStringArray(json, DisabledKey))
                     {
-                        if (settings.Disabled == null)
+                        if (!settings.IsDisabled(item))
                         {
-                            settings.Disabled = new List<string>();
+                            settings.Disabled.Add(item);
                         }
-                        return settings;
                     }
+                    return settings;
                 }
             }
             catch (Exception)
@@ -85,8 +86,25 @@ namespace DbChronicle.Cli.Plugins
                 Directory.CreateDirectory(directory);
             }
 
-            var json = JsonSerializer.Serialize(this, new JsonSerializerOptions { WriteIndented = true });
-            File.WriteAllText(SettingsPath, json);
+            var builder = new StringBuilder();
+            builder.AppendLine("{");
+            if (Disabled.Count == 0)
+            {
+                builder.AppendLine("  \"" + DisabledKey + "\": []");
+            }
+            else
+            {
+                builder.AppendLine("  \"" + DisabledKey + "\": [");
+                for (var i = 0; i < Disabled.Count; i++)
+                {
+                    builder.Append("    \"").Append(Escape(Disabled[i])).Append('"');
+                    builder.AppendLine(i == Disabled.Count - 1 ? "" : ",");
+                }
+                builder.AppendLine("  ]");
+            }
+            builder.AppendLine("}");
+
+            File.WriteAllText(SettingsPath, builder.ToString(), new UTF8Encoding(false));
         }
 
         public bool IsDisabled(string name)
@@ -129,6 +147,89 @@ namespace DbChronicle.Cli.Plugins
                 }
             }
             return false;
+        }
+
+        private static IEnumerable<string> ParseStringArray(string json, string key)
+        {
+            var result = new List<string>();
+            if (string.IsNullOrEmpty(json))
+            {
+                return result;
+            }
+
+            var keyIndex = json.IndexOf("\"" + key + "\"", StringComparison.OrdinalIgnoreCase);
+            if (keyIndex < 0)
+            {
+                return result;
+            }
+
+            var open = json.IndexOf('[', keyIndex);
+            if (open < 0)
+            {
+                return result;
+            }
+
+            var close = json.IndexOf(']', open);
+            if (close < 0)
+            {
+                return result;
+            }
+
+            var body = json.Substring(open + 1, close - open - 1);
+            var current = new StringBuilder();
+            var inString = false;
+            var escaped = false;
+
+            foreach (var ch in body)
+            {
+                if (!inString)
+                {
+                    if (ch == '"')
+                    {
+                        inString = true;
+                        current.Length = 0;
+                    }
+                    continue;
+                }
+
+                if (escaped)
+                {
+                    current.Append(ch);
+                    escaped = false;
+                    continue;
+                }
+
+                if (ch == '\\')
+                {
+                    escaped = true;
+                    continue;
+                }
+
+                if (ch == '"')
+                {
+                    inString = false;
+                    var value = current.ToString();
+                    if (value.Length > 0)
+                    {
+                        result.Add(value);
+                    }
+                    continue;
+                }
+
+                current.Append(ch);
+            }
+
+            return result;
+        }
+
+        private static string Escape(string value)
+        {
+            if (string.IsNullOrEmpty(value))
+            {
+                return "";
+            }
+
+            return value.Replace("\\", "\\\\").Replace("\"", "\\\"");
         }
     }
 }

@@ -19,7 +19,7 @@ namespace DbChronicle.Parsing
     public sealed class ChangeUnitParser
     {
         private static readonly Regex FileNamePattern =
-            new Regex(@"^(\d{8}_\d{6})_([0-9a-f]{6})_([a-z0-9_]+)\.xml$", RegexOptions.IgnoreCase);
+            new Regex(@"^\d{8}_.+\.xml$", RegexOptions.IgnoreCase);
 
         private readonly DbChronicleConfig _config;
 
@@ -85,6 +85,7 @@ namespace DbChronicle.Parsing
                 var operation = new RawSqlOperation { Table = Attr(rawSql, "name") };
                 ReadRawSql(unit, rawSql, operation);
                 operation.Stage = ParseStage(unit, rawSql, operation.Table, null);
+                operation.StageSpecified = !string.IsNullOrEmpty(Attr(rawSql, "stage"));
                 unit.Operations.Add(operation);
             }
 
@@ -832,7 +833,7 @@ namespace DbChronicle.Parsing
             if (!match.Success)
             {
                 AddError(unit, "E003", null, null,
-                    "文件名不符合规范 {yyyyMMdd_HHmmss}_{6位随机码}_{描述}.xml：" + fileName);
+                    "文件名不符合规范 {yyyyMMdd_HHmmss}.xml（须以 8 位日期开头）：" + fileName);
                 return;
             }
 
