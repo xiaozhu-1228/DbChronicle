@@ -38,6 +38,31 @@ namespace DbChronicle.Tests
         }
 
         [Fact]
+        public void Compile_ShouldEmitInlinePrimaryKey_WhenAlterAddColumn()
+        {
+            var sql = TestSupport.CompileSql(
+                "  <table name=\"nor_user\" action=\"ALTER\">\n"
+                + "    <column name=\"id\" action=\"ADD\" type=\"Int64\" primaryKey=\"true\" autoIncrement=\"true\" nullable=\"false\"/>\n"
+                + "  </table>",
+                false);
+
+            Assert.Contains("ALTER TABLE `nor_user` ADD COLUMN `id` BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY", sql);
+        }
+
+        [Fact]
+        public void Compile_ShouldNotEmitInlinePrimaryKey_WhenModifyColumn()
+        {
+            var sql = TestSupport.CompileSql(
+                "  <table name=\"nor_user\" action=\"ALTER\">\n"
+                + "    <column name=\"name\" action=\"MODIFY\" type=\"String\" length=\"64\" primaryKey=\"true\" nullable=\"false\"/>\n"
+                + "  </table>",
+                false);
+
+            Assert.Contains("MODIFY COLUMN `name` VARCHAR(64) NOT NULL", sql);
+            Assert.DoesNotContain("PRIMARY KEY", sql);
+        }
+
+        [Fact]
         public void Compile_ShouldWarn_WhenDateTimeOffset()
         {
             var unit = TestSupport.ParseSingle(

@@ -168,7 +168,8 @@ namespace DbChronicle.Compilation.Dialects
         {
             StringBuilder stringBuilder = new StringBuilder();
             stringBuilder.Append("ALTER TABLE ").Append(Quote(operation.Table)).Append(" ADD ")
-                .Append(BuildColumnDefinition(operation.Definition, operation.Table, inlineDefault: true))
+                .Append(BuildColumnDefinition(operation.Definition, operation.Table, inlineDefault: true,
+                    allowInlinePrimaryKey: true))
                 .Append(';');
             if (!string.IsNullOrEmpty(operation.Definition.Comment))
             {
@@ -330,7 +331,8 @@ namespace DbChronicle.Compilation.Dialects
             return ResolveDialectSql(operation.SqlByDialect, operation.Table, "W032");
         }
 
-        private string BuildColumnDefinition(ColumnDefinition column, string table, bool inlineDefault)
+        private string BuildColumnDefinition(ColumnDefinition column, string table, bool inlineDefault,
+            bool allowInlinePrimaryKey = false)
         {
             if (!column.Type.HasValue)
             {
@@ -343,6 +345,10 @@ namespace DbChronicle.Compilation.Dialects
                 stringBuilder.Append(" IDENTITY(1,1)");
             }
             stringBuilder.Append(column.Nullable.GetValueOrDefault() ? " NULL" : " NOT NULL");
+            if (allowInlinePrimaryKey && column.PrimaryKey.GetValueOrDefault())
+            {
+                stringBuilder.Append(" PRIMARY KEY");
+            }
             if (column.Unique.GetValueOrDefault())
             {
                 stringBuilder.Append(" UNIQUE");

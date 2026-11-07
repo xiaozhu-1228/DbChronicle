@@ -217,8 +217,106 @@ namespace DbChronicle.Cli.Tests
             return CliArguments.Parse(new[] { "--config", Path.Combine(directory, ConfigLoader.DefaultFileName) });
         }
 
+        [Fact]
+        public void CompileWithMigrations_ShouldNotReadOrCreateConfigFile()
+        {
+            var directory = CreateProject();
+            var configPath = Path.Combine(directory, ConfigLoader.DefaultFileName);
+            File.Delete(configPath);
+
+            var outputDirectory = Path.Combine(directory, "inline-sql");
+            var args = CliArguments.Parse(new[]
+            {
+                "--migrations", Path.Combine(directory, "migrations"),
+                "--dialect", "mysql",
+                "--split", "--output-dir", outputDirectory
+            });
+            Capture(() => Commands.Compile(args));
+
+            Assert.Equal(ExitCodes.Success, LastExit);
+            Assert.False(File.Exists(configPath), "传了 --migrations 就不应读取或生成配置文件");
+            Assert.True(File.Exists(Path.Combine(outputDirectory, "20261023_100000_a1b2c3.mysql.sql")));
+        }
+
+        [Theory]
+        [InlineData("postgres")]
+        [InlineData("pg")]
+        [InlineData("pgsql")]
+        public void CompileWithMigrations_ShouldAcceptPostgresAlias(string dialect)
+        {
+            var directory = CreateProject();
+            var outputDirectory = Path.Combine(directory, "alias-" + dialect);
+            var args = CliArguments.Parse(new[]
+            {
+                "--migrations", Path.Combine(directory, "migrations"),
+                "--dialect", dialect,
+                "--split", "--output-dir", outputDirectory
+            });
+            Capture(() => Commands.Compile(args));
+
+            Assert.Equal(ExitCodes.Success, LastExit);
+            var file = Path.Combine(outputDirectory, "20261023_100000_a1b2c3.postgresql.sql");
+            Assert.True(File.Exists(file), dialect + " 别名应归一化为 postgresql");
+            Assert.Contains("\"", File.ReadAllText(file));
+        }
+
+        [Fact]
+        public void CompileWithNoConfig_ShouldApplyCommandLineOverrides()
+        {
+            var directory = CreateProject();
+            var configPath = Path.Combine(directory, ConfigLoader.DefaultFileName);
+            File.Delete(configPath);
+
+            var outputDirectory = Path.Combine(directory, "noconfig-out");
+            var args = CliArguments.Parse(new[]
+            {
+                "--no-config",
+                "--migrations", Path.Combine(directory, "migrations"),
+                "--dialect", "pgsql",
+                "--no-sql-comments",
+                "--environment", "qa",
+                "--version-log", Path.Combine(directory, "logs"),
+                "--statement-delimiter", ";",
+                "--lock-timeout", "5",
+                "--commit-scope", "table",
+                "--commit-batch-size", "3",
+                "--no-incremental-modify",
+                "--allow-destructive",
+                "--output-dir", outputDirectory
+            });
+            Capture(() => Commands.Compile(args));
+
+            Assert.Equal(ExitCodes.Success, LastExit);
+            Assert.False(File.Exists(configPath), "--no-config 不应生成配置文件");
+            var file = Path.Combine(outputDirectory, "postgresql.sql");
+            Assert.True(File.Exists(file));
+            Assert.DoesNotContain("-- ChangeUnit", File.ReadAllText(file));
+        }
+
+        [Theory]
+        [InlineData("20261023", true)]
+        [InlineData("20261023_100000_a1b2c3", false)]
+        public void CompileWithSince_ShouldSelectOnlyNewerUnits(string since, bool expectsUnit)
+        {
+            var directory = CreateProject();
+            var outputDirectory = Path.Combine(directory, "since-" + expectsUnit);
+            var args = CliArguments.Parse(new[]
+            {
+                "--migrations", Path.Combine(directory, "migrations"),
+                "--dialect", "mysql",
+                "--since", since,
+                "--split", "--output-dir", outputDirectory
+            });
+            Capture(() => Commands.Compile(args));
+
+            Assert.Equal(ExitCodes.Success, LastExit);
+            var exists = Directory.Exists(outputDirectory)
+                && Directory.GetFiles(outputDirectory, "*.sql").Length > 0;
+            Assert.Equal(expectsUnit, exists);
+        }
+
         /// <summary>构造临时工程：配置 + 一个合法变更单元。</summary>
-        private static string CreateProject()
+        internal static string CreateProject()
         {
             var directory = Path.Combine(Path.GetTempPath(), "dbchronicle-cli-tests", Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(Path.Combine(directory, "migrations"));

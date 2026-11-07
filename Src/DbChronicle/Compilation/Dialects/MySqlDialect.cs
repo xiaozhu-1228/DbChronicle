@@ -106,7 +106,8 @@ namespace DbChronicle.Compilation.Dialects
             }
             StringBuilder stringBuilder = new StringBuilder();
             stringBuilder.Append("ALTER TABLE ").Append(Quote(operation.Table)).Append(" ADD COLUMN ")
-                .Append(BuildColumnDefinition(operation.Definition, operation.Table, allowInlineForeignKey: false));
+                .Append(BuildColumnDefinition(operation.Definition, operation.Table, allowInlineForeignKey: false,
+                    allowInlinePrimaryKey: true));
             if (!string.IsNullOrEmpty(operation.After))
             {
                 stringBuilder.Append(string.Equals(operation.After, "FIRST", StringComparison.OrdinalIgnoreCase) ? " FIRST" : (" AFTER " + Quote(operation.After)));
@@ -126,7 +127,15 @@ namespace DbChronicle.Compilation.Dialects
             {
                 Warn("W016", operation.Table, operation.Name, "MySQL 在 ALTER TABLE MODIFY COLUMN 中会忽略列级外键引用，请改用 <foreignKey>");
             }
-            return "ALTER TABLE " + Quote(operation.Table) + " MODIFY COLUMN " + BuildColumnDefinition(operation.Definition, operation.Table, allowInlineForeignKey: false) + ";";
+            StringBuilder stringBuilder = new StringBuilder();
+            stringBuilder.Append("ALTER TABLE ").Append(Quote(operation.Table)).Append(" MODIFY COLUMN ")
+                .Append(BuildColumnDefinition(operation.Definition, operation.Table, allowInlineForeignKey: false));
+            if (!string.IsNullOrEmpty(operation.After))
+            {
+                stringBuilder.Append(string.Equals(operation.After, "FIRST", StringComparison.OrdinalIgnoreCase) ? " FIRST" : (" AFTER " + Quote(operation.After)));
+            }
+            stringBuilder.Append(';');
+            return stringBuilder.ToString();
         }
 
         public override string DropColumn(ColumnOperation operation)
@@ -335,7 +344,8 @@ namespace DbChronicle.Compilation.Dialects
             return text + ";";
         }
 
-        protected string BuildColumnDefinition(ColumnDefinition column, string table, bool allowInlineForeignKey = true)
+        protected string BuildColumnDefinition(ColumnDefinition column, string table, bool allowInlineForeignKey = true,
+            bool allowInlinePrimaryKey = false)
         {
             if (!column.Type.HasValue)
             {
@@ -363,6 +373,10 @@ namespace DbChronicle.Compilation.Dialects
             if (column.AutoIncrement.GetValueOrDefault())
             {
                 stringBuilder.Append(" AUTO_INCREMENT");
+            }
+            if (allowInlinePrimaryKey && column.PrimaryKey.GetValueOrDefault())
+            {
+                stringBuilder.Append(" PRIMARY KEY");
             }
             if (column.Unique.GetValueOrDefault())
             {

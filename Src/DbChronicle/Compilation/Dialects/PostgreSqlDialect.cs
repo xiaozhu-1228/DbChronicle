@@ -21,7 +21,7 @@ namespace DbChronicle.Compilation.Dialects
 
         public override string Quote(string identifier)
         {
-            return "\"" + (identifier ?? "").Replace("\"", "\"\"") + "\"";
+            return "\"" + (identifier ?? "").Replace("\"", "\"\"").ToLowerInvariant() + "\"";
         }
 
         /// <summary>PostgreSQL 的 boolean 字面量是 true/false，不能沿用基类的 1/0。</summary>
@@ -159,7 +159,7 @@ namespace DbChronicle.Compilation.Dialects
         {
             StringBuilder stringBuilder = new StringBuilder();
             stringBuilder.Append("ALTER TABLE ").Append(Quote(operation.Table)).Append(" ADD COLUMN ")
-                .Append(BuildColumnDefinition(operation.Definition, operation.Table))
+                .Append(BuildColumnDefinition(operation.Definition, operation.Table, allowInlinePrimaryKey: true))
                 .Append(';');
             if (operation.Definition.Comment != null)
             {
@@ -428,7 +428,7 @@ namespace DbChronicle.Compilation.Dialects
             return text + ";";
         }
 
-        private string BuildColumnDefinition(ColumnDefinition column, string table)
+        private string BuildColumnDefinition(ColumnDefinition column, string table, bool allowInlinePrimaryKey = false)
         {
             if (!column.Type.HasValue)
             {
@@ -443,6 +443,10 @@ namespace DbChronicle.Compilation.Dialects
             if (column.Nullable.HasValue)
             {
                 stringBuilder.Append(column.Nullable.Value ? " NULL" : " NOT NULL");
+            }
+            if (allowInlinePrimaryKey && column.PrimaryKey.GetValueOrDefault())
+            {
+                stringBuilder.Append(" PRIMARY KEY");
             }
             if (column.Unique.GetValueOrDefault())
             {

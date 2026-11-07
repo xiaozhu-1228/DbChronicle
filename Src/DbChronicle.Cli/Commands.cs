@@ -138,30 +138,126 @@ namespace DbChronicle.Cli
 
         private static DbChronicleConfig LoadConfig(CliArguments args)
         {
-            var config = LoadConfigFromFile(args);
+            var noConfig = args.Has("no-config");
+            var migrations = args.Get("migrations", null);
+            var config = (noConfig || !string.IsNullOrEmpty(migrations))
+                ? CreateInlineConfig()
+                : LoadConfigFromFile(args);
+
             ApplyConfigOverrides(config, args);
             return config;
         }
 
-        /// <summary>命令行覆盖配置里的方言与数据库版本（一份配置可服务多种库）。</summary>
+        private static DbChronicleConfig CreateInlineConfig()
+        {
+            return new DbChronicleConfig
+            {
+                BaseDirectory = Directory.GetCurrentDirectory()
+            };
+        }
+
         private static void ApplyConfigOverrides(DbChronicleConfig config, CliArguments args)
         {
             var dialect = args.Get("dialect", null);
             if (!string.IsNullOrEmpty(dialect))
             {
-                var normalized = dialect.Trim().ToLowerInvariant();
+                var normalized = dialect.Trim();
                 if (!DialectFactory.IsSupported(normalized))
                 {
                     throw new CliFailureException(ExitCodes.Usage,
                         "不支持的方言：" + dialect + "（可选：" + string.Join(" / ", DialectFactory.SupportedDialects) + "）");
                 }
-                config.Database.Dialect = normalized;
+                config.Database.Dialect = DialectFactory.Normalize(normalized);
             }
 
             var version = args.Get("db-version", null);
             if (!string.IsNullOrEmpty(version))
             {
                 config.Database.Version = version.Trim();
+            }
+
+            var environment = args.Get("environment", null);
+            if (!string.IsNullOrEmpty(environment))
+            {
+                config.Environment = environment.Trim();
+            }
+
+            var migrations = args.Get("migrations", null);
+            if (!string.IsNullOrEmpty(migrations))
+            {
+                config.Paths.Migrations = migrations;
+            }
+
+            var versionLog = args.Get("version-log", null);
+            if (!string.IsNullOrEmpty(versionLog))
+            {
+                config.Paths.VersionLog = versionLog;
+            }
+
+            var output = args.Get("output-dir", null) ?? args.Get("out", null);
+            if (!string.IsNullOrEmpty(output))
+            {
+                config.Paths.Output = output;
+            }
+
+            var baseline = args.Get("baseline", null);
+            if (baseline != null)
+            {
+                config.Baseline.File = baseline;
+            }
+
+            ApplyBoolOption(args, "baseline-frozen", "no-baseline-frozen", value => config.Baseline.Frozen = value);
+
+            var frozenAt = args.Get("baseline-frozen-at", null);
+            if (frozenAt != null)
+            {
+                config.Baseline.FrozenAt = frozenAt;
+            }
+
+            ApplyBoolOption(args, "quote-identifiers", "no-quote-identifiers", value => config.Options.QuoteIdentifiers = value);
+            ApplyBoolOption(args, "sql-comments", "no-sql-comments", value => config.Options.IncludeComments = value);
+            ApplyBoolOption(args, "include-rollback", "no-include-rollback", value => config.Options.IncludeRollback = value);
+            ApplyBoolOption(args, "incremental-modify", "no-incremental-modify", value => config.Options.IncrementalModify = value);
+
+            if (args.Has("allow-destructive"))
+            {
+                config.Options.AllowDestructive = true;
+            }
+
+            var delimiter = args.Get("statement-delimiter", null);
+            if (!string.IsNullOrEmpty(delimiter))
+            {
+                config.Options.StatementDelimiter = delimiter;
+            }
+
+            var lockTimeout = args.GetInt("lock-timeout", -1);
+            if (lockTimeout >= 0)
+            {
+                config.Options.LockTimeoutSeconds = lockTimeout;
+            }
+
+            var commitScope = args.Get("commit-scope", null);
+            if (!string.IsNullOrEmpty(commitScope))
+            {
+                config.Options.CommitScope = commitScope.Trim().ToLowerInvariant();
+            }
+
+            var commitBatchSize = args.GetInt("commit-batch-size", -1);
+            if (commitBatchSize >= 0)
+            {
+                config.Options.CommitBatchSize = commitBatchSize;
+            }
+        }
+
+        private static void ApplyBoolOption(CliArguments args, string onName, string offName, Action<bool> apply)
+        {
+            if (args.Has(offName))
+            {
+                apply(false);
+            }
+            else if (args.Has(onName))
+            {
+                apply(true);
             }
         }
 
@@ -210,6 +306,14 @@ namespace DbChronicle.Cli
                 {
                     Console.WriteLine(diagnostic.ToString());
                 }
+            }
+        }
+
+        private static void PrintDiagnostics(IEnumerable<CompileDiagnostic> diagnostics, TextWriter writer)
+        {
+            foreach (var diagnostic in diagnostics)
+            {
+                writer.WriteLine(diagnostic.ToString());
             }
         }
     }

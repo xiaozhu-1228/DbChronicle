@@ -9,7 +9,7 @@ namespace DbChronicle.Compilation.Dialects
 
         public static ISqlDialect Create(string dialectName, string version, DialectContext context)
         {
-            return (dialectName ?? "").Trim().ToLowerInvariant() switch
+            return Normalize(dialectName) switch
             {
                 "mysql" => new MySqlDialect(DefaultIfEmpty(version, "8.0"), context),
                 "mariadb" => new MariaDbDialect(DefaultIfEmpty(version, "10.5"), context),
@@ -22,21 +22,28 @@ namespace DbChronicle.Compilation.Dialects
 
         public static bool IsSupported(string dialectName)
         {
-            string text = (dialectName ?? "").Trim().ToLowerInvariant();
-            int result;
+            string text = Normalize(dialectName);
+            return text == "mysql"
+                || text == "mariadb"
+                || text == "postgresql"
+                || text == "sqlserver"
+                || text == "sqlite";
+        }
+
+        public static string Normalize(string dialectName)
+        {
+            var text = (dialectName ?? "").Trim().ToLowerInvariant();
             switch (text)
             {
+                case "postgres":
+                case "pg":
+                case "pgsql":
+                    return "postgresql";
+                case "mssql":
+                    return "sqlserver";
                 default:
-                    result = ((text == "sqlite") ? 1 : 0);
-                    break;
-                case "mysql":
-                case "mariadb":
-                case "postgresql":
-                case "sqlserver":
-                    result = 1;
-                    break;
+                    return text;
             }
-            return (byte)result != 0;
         }
 
         private static string DefaultIfEmpty(string value, string fallback)

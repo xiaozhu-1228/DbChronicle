@@ -305,15 +305,15 @@ subprocess.run(
 
 **CLI 的部署形态：**
 
-| 形态                                            | 依赖             | 适用                       |
-| ----------------------------------------------- | ---------------- | -------------------------- |
-| 自包含 exe（`dotnet publish -f net8.0 --self-contained`） | 无 .NET 运行时   | 服务器、Docker、跨语言调用 |
-| 框架依赖（`dotnet tool install -g`）            | 需 .NET 8 运行时 | 开发机、C# 项目            |
-| 框架依赖（`-f net48` 产出）                     | 只需 .NET Framework 4.8 | 仅有 .NET Framework 的部署机（离线编译能力） |
+| 形态                                                      | 依赖                    | 适用                                         |
+| --------------------------------------------------------- | ----------------------- | -------------------------------------------- |
+| 自包含 exe（`dotnet publish -f net8.0 --self-contained`） | 无 .NET 运行时          | 服务器、Docker、跨语言调用                   |
+| 框架依赖（`dotnet tool install -g`）                      | 需 .NET 8 运行时        | 开发机、C# 项目                              |
+| 框架依赖（`-f net48` 产出）                               | 只需 .NET Framework 4.8 | 仅有 .NET Framework 的部署机（离线编译能力） |
 
 **跨语言调用的标准做法：** Flyway、Liquibase 都是「Java 项目用 jar，非 Java 项目用 CLI」的模式。CLI 是跨语言调用的标准边界，不是妥协。
 
-**跨语言薄 SDK（可选）：** 内部仍 exec CLI，对外暴露更友好的 API。DbChronicle 只维护 CLI，**不随仓库发布各语言 SDK**——需要封装时在目标项目内实现（C++ 侧建议直接写子进程调用 + `compile --pending --split` 的编排），避免仓库里存在无法编译验证的副本。
+**跨语言薄 SDK（可选）：** 内部仍 exec CLI，对外暴露更友好的 API。DbChronicle 只维护 CLI，**不随仓库发布各语言 SDK**——需要封装时在目标项目内实现（C++ 侧建议直接写子进程调用 + `compile --pending --emit pipe` 的编排，结果按分隔符文本记录从管道读取、不落盘），避免仓库里存在无法编译验证的副本。
 
 ```java
 // Java SDK 形态（可选封装）
@@ -322,11 +322,11 @@ DbChronicle.apply("DbchronicleConfig.xml", connectionString);
 
 **非 C# 项目的基线生成：**
 
-| 方式                                                 | 适用场景              | 状态               |
-| ---------------------------------------------------- | --------------------- | ------------------ |
-| 手写基线 XML                                         | 实体不多（< 20 张表） | ✅                  |
+| 方式                                                              | 适用场景              | 状态               |
+| ----------------------------------------------------------------- | --------------------- | ------------------ |
+| 手写基线 XML                                                      | 实体不多（< 20 张表） | ✅                  |
 | `Scanner.Database` 从现有数据库反向生成（`scan --from database`） | 数据库已存在          | ✅ 已支持（5 方言） |
-| 对应语言的 Scanner（`scan --from source --language java       | go                    | typescript`）      |
+| 对应语言的 Scanner（`scan --from source --language java           | go                    | typescript`）      |
 
 XML 格式是语言中立的契约，Core 不关心它从哪来。
 
@@ -776,10 +776,10 @@ ChangeUnit 内的操作排序键依次是：**表（首次出现序）→ 操作
 
 两个例外：
 
-| 情况 | 位置 |
-| ---- | ---- |
-| `stage="before"` 的操作、通配符展开 | 提到所有表之前 |
-| `rawSql` 与无表名的操作 | 排在所有表之后，按推断出的类型排序 |
+| 情况                                | 位置                               |
+| ----------------------------------- | ---------------------------------- |
+| `stage="before"` 的操作、通配符展开 | 提到所有表之前                     |
+| `rawSql` 与无表名的操作             | 排在所有表之后，按推断出的类型排序 |
 
 因此**表的书写顺序就是依赖顺序**：被引用的表要写在引用它的表之前（例如 `nor_user` 写在 `nor_order` 之前，后者加外键引用前者）。
 
@@ -829,29 +829,29 @@ ChangeUnit 内的操作排序键依次是：**表（首次出现序）→ 操作
 
 **排序规则：**
 
-| 规则          | 说明                                                                                                               |
-| ------------- | ------------------------------------------------------------------------------------------------------------------ |
-| 建表最先（表内） | 同一张表的 `CREATE TABLE` 先于它的任何 `ALTER`，否则「建表 + 加索引 / 外键」必然失败                            |
-| 改名先于改列  | `RENAME_TABLE` / `RENAME_COLUMN` 之后，同单元内后续操作必须引用**新名字**；引用旧名由 `check` 报错                 |
-| 加外键最后    | 外键依赖被引用表的列、主键或唯一约束、以及可用的索引                                                               |
-| 数据在表内最后 | `stage="after"`（缺省）的数据操作排在该表结构变更之后；需要更早执行就写 `stage="before"`                          |
-| 原生 SQL 归类 | 未写 `stage` 时按首个关键字推断所属段（见下表）；识别不了才排最后                                                  |
-| 显式 stage 优先 | 写了 `stage` 就不参与推断：`before` 提到最前，`after` 放到最后                                                    |
-| 整表连续      | 同一张表的操作连续执行完才进入下一张表；`rawSql` 与无表操作排在所有表之后                                          |
-| 跨单元不排序  | 跨 ChangeUnit 只按 `(release, change_id)` 决定先后；`<depends>` 只做存在性与顺序校验，不改变物理顺序               |
+| 规则             | 说明                                                                                                 |
+| ---------------- | ---------------------------------------------------------------------------------------------------- |
+| 建表最先（表内） | 同一张表的 `CREATE TABLE` 先于它的任何 `ALTER`，否则「建表 + 加索引 / 外键」必然失败                 |
+| 改名先于改列     | `RENAME_TABLE` / `RENAME_COLUMN` 之后，同单元内后续操作必须引用**新名字**；引用旧名由 `check` 报错   |
+| 加外键最后       | 外键依赖被引用表的列、主键或唯一约束、以及可用的索引                                                 |
+| 数据在表内最后   | `stage="after"`（缺省）的数据操作排在该表结构变更之后；需要更早执行就写 `stage="before"`             |
+| 原生 SQL 归类    | 未写 `stage` 时按首个关键字推断所属段（见下表）；识别不了才排最后                                    |
+| 显式 stage 优先  | 写了 `stage` 就不参与推断：`before` 提到最前，`after` 放到最后                                       |
+| 整表连续         | 同一张表的操作连续执行完才进入下一张表；`rawSql` 与无表操作排在所有表之后                            |
+| 跨单元不排序     | 跨 ChangeUnit 只按 `(release, change_id)` 决定先后；`<depends>` 只做存在性与顺序校验，不改变物理顺序 |
 
 **`<rawSql>` 的语义推断（未写 `stage` 时）：**
 
-| SQL 开头 | 归入 | 落位 |
-| -------- | ---- | ---- |
-| `INSERT` / `UPDATE` / `DELETE` / `MERGE` / `REPLACE` / `TRUNCATE` | 数据类 | 段 3 |
-| `DROP INDEX` | 删索引 | 段 0 |
-| `CREATE INDEX` / `CREATE UNIQUE` | 建索引 | 段 2，索引位置 |
-| `ALTER TABLE ... FOREIGN KEY` | 加外键 | 段 2，索引之后 |
-| `ALTER TABLE ... INDEX` / `... KEY` | 建索引 | 段 2 |
-| `ALTER TABLE`（其他）/ `CREATE TABLE` | 改表 | 段 2，与加列同级 |
-| `DROP TABLE` | 删表 | 段 0 |
-| 其他（`GRANT` / `CALL` / 过程体等） | 未识别 | 段 4（最后），与旧行为一致 |
+| SQL 开头                                                          | 归入   | 落位                       |
+| ----------------------------------------------------------------- | ------ | -------------------------- |
+| `INSERT` / `UPDATE` / `DELETE` / `MERGE` / `REPLACE` / `TRUNCATE` | 数据类 | 段 3                       |
+| `DROP INDEX`                                                      | 删索引 | 段 0                       |
+| `CREATE INDEX` / `CREATE UNIQUE`                                  | 建索引 | 段 2，索引位置             |
+| `ALTER TABLE ... FOREIGN KEY`                                     | 加外键 | 段 2，索引之后             |
+| `ALTER TABLE ... INDEX` / `... KEY`                               | 建索引 | 段 2                       |
+| `ALTER TABLE`（其他）/ `CREATE TABLE`                             | 改表   | 段 2，与加列同级           |
+| `DROP TABLE`                                                      | 删表   | 段 0                       |
+| 其他（`GRANT` / `CALL` / 过程体等）                               | 未识别 | 段 4（最后），与旧行为一致 |
 
 推断只看「去掉前导注释后的首个关键字」，不做完整 SQL 解析；需要精确控制时显式写 `stage`。
 
@@ -921,11 +921,11 @@ db-chronicle new --description "加列 nor_user phone 字段"
 
 **手动添加是支持的，但必须符合规范。**
 
-| 方式                                  | 推荐度               | 唯一性保证                                     |
-| ------------------------------------- | -------------------- | ---------------------------------------------- |
-| CLI `new` 命令                        | ⭐⭐⭐ 推荐             | 日期+描述 + `FileMode.CreateNew` + 序号递增    |
+| 方式                                  | 推荐度               | 唯一性保证                                    |
+| ------------------------------------- | -------------------- | --------------------------------------------- |
+| CLI `new` 命令                        | ⭐⭐⭐ 推荐             | 日期+描述 + `FileMode.CreateNew` + 序号递增   |
 | 手动创建                              | ⭐⭐ 允许              | 8 位日期开头 + id 与文件名一致 + Git 冲突保护 |
-| Core API `ChangeUnitFactory.Create()` | ⭐⭐⭐ 推荐（编程场景） | 同 CLI                                         |
+| Core API `ChangeUnitFactory.Create()` | ⭐⭐⭐ 推荐（编程场景） | 同 CLI                                        |
 
 **手动添加的合法场景：**
 
@@ -948,10 +948,10 @@ db-chronicle new --description "加列 nor_user phone 字段"
 
 | 层级       | 机制                                                | 说明                           |
 | ---------- | --------------------------------------------------- | ------------------------------ |
-| 生成层     | 时间戳（到秒）+ `FileMode.CreateNew`                | 文件已存在时抛异常，绝不覆盖 |
+| 生成层     | 时间戳（到秒）+ `FileMode.CreateNew`                | 文件已存在时抛异常，绝不覆盖   |
 | 版本控制层 | Git 同名冲突保护 + 禁止 force push 到 `migrations/` | 同名文件合并时冲突，不静默覆盖 |
 | 执行层     | checksum 强校验                                     | 已应用文件被修改时拒绝执行     |
-| CI 层      | `check` + `verify-checksum` 门禁                             | 冲突或 checksum 不一致阻止合并 |
+| CI 层      | `check` + `verify-checksum` 门禁                    | 冲突或 checksum 不一致阻止合并 |
 
 **`new` 命令生成逻辑：**
 
@@ -1172,15 +1172,15 @@ API 与 CLI `new` 命令共享同一套命名逻辑，保证文件名规范一�
 
 **incremental 模式的边界（补不到就退化为当前声明，逐列告警）：**
 
-| 情况                                         | 处置                                                                    |
-| -------------------------------------------- | ----------------------------------------------------------------------- |
-| 基线文件缺失                                 | **退化**：所有 `MODIFY` 按 XML 声明处理，输出 W014                      |
-| 表不在累积模型中（基线未包含、外部系统建的） | 该表的 `MODIFY` 逐列退化 + W014                                         |
-| 列不在累积模型中（历史链从未 `ADD` 过该列）  | 该列退化 + W014                                                         |
-| 该列历史上有 `RENAME`                        | 按最后一次改名后的名字解析（能补全则正常补全）                          |
-| 该列曾被 `DROP` 后重新 `ADD`                 | 用最后一次 `ADD` 的定义                                                 |
-| 累积模型与库实际不一致（库被手工改过）       | `compile` 无法感知；由 `apply` 的 introspect 复核（v1.1）报告"模型漂移" |
-| 历史文件被修改                               | 模型基于文件当前内容，与库的一致性由 `verify-checksum` 的 checksum 校验保证      |
+| 情况                                         | 处置                                                                        |
+| -------------------------------------------- | --------------------------------------------------------------------------- |
+| 基线文件缺失                                 | **退化**：所有 `MODIFY` 按 XML 声明处理，输出 W014                          |
+| 表不在累积模型中（基线未包含、外部系统建的） | 该表的 `MODIFY` 逐列退化 + W014                                             |
+| 列不在累积模型中（历史链从未 `ADD` 过该列）  | 该列退化 + W014                                                             |
+| 该列历史上有 `RENAME`                        | 按最后一次改名后的名字解析（能补全则正常补全）                              |
+| 该列曾被 `DROP` 后重新 `ADD`                 | 用最后一次 `ADD` 的定义                                                     |
+| 累积模型与库实际不一致（库被手工改过）       | `compile` 无法感知；由 `apply` 的 introspect 复核（v1.1）报告"模型漂移"     |
+| 历史文件被修改                               | 模型基于文件当前内容，与库的一致性由 `verify-checksum` 的 checksum 校验保证 |
 
 **退化的准确含义：**
 
@@ -1246,10 +1246,10 @@ API 与 CLI `new` 命令共享同一套命名逻辑，保证文件名规范一�
 
 **`stage` 属性（数据操作的执行时机）：**
 
-| 取值            | 执行时机                       | 典型用途                         |
-| --------------- | ------------------------------ | -------------------------------- |
-| `before`        | 提到所有表之前（4.2）          | 回填空值、清洗脏数据、拆分旧列   |
-| `after`（缺省） | 该表结构变更之后               | 数据搬迁、种子数据、按新结构更新 |
+| 取值            | 执行时机              | 典型用途                         |
+| --------------- | --------------------- | -------------------------------- |
+| `before`        | 提到所有表之前（4.2） | 回填空值、清洗脏数据、拆分旧列   |
+| `after`（缺省） | 该表结构变更之后      | 数据搬迁、种子数据、按新结构更新 |
 
 适用节点：`<dataMigration>`、`<seed>`、`<update>`、`<delete>`、`<clean>`、`<backfill>`。同一 changeUnit 内允许多个 `stage="before"` 节点，按声明顺序执行。
 
@@ -1390,37 +1390,37 @@ INSERT INTO nor_sys_log (msg) VALUES ('migrated by 1.2.0');
 
 #### 4.5.10 校验规则（解析时强制）
 
-| 规则                                                                     | 错误处理                            |
-| ------------------------------------------------------------------------ | ----------------------------------- |
-| `id` 必须与文件名前缀一致                                                | 解析失败                            |
-| `release` 必填，格式 `yyyyMMdd`，不得晚于当前 + 1 天                     | 解析失败                            |
-| `type` 必须在 `LogicalType` 枚举内                                       | 解析失败                            |
-| `FixedString` / `String` / `Binary` 必须显式提供 `length`                | 解析失败                            |
-| `Blob` 的 `length` 属性被忽略，输出警告                                  | 警告                                |
-| `RENAME` 必须提供 `renamedFrom`                                          | 解析失败                            |
-| `RENAME` 之后，同单元内仍引用旧列名 / 旧表名                             | `check` 命令报错                    |
-| `MODIFY` 在 full 模式下必须声明 `type` 与 `nullable`（见 4.5.5）         | 解析失败                            |
-| `MODIFY` 在 incremental 模式（默认）下至少声明一项                       | 解析失败                            |
-| 增量补全基底缺失（无基线 / 表列不在累积模型）                            | 警告（W014）并按已写内容退化        |
-| `MODIFY` 在 full 模式下未声明 `defaultValue`（= 目标无默认值）           | 警告（W008）                        |
-| `foreignKey` 格式必须为 `表名.列名`                                      | 解析失败                            |
-| 同一 `changeUnit` 内，同一表同一列不得重复出现                           | 解析失败                            |
-| `rawSql` 直接写文本时不区分方言；旧写法（子 `<sql dialect>`）缺当前方言  | 编译时跳过 + 警告（W032）           |
-| `DROP_TABLE` / `DROP_COLUMN` 必须有显式 `allowDestructive` 配置          | 解析失败                            |
-| `unsigned=true` 仅对整数类型有效                                         | 解析失败                            |
-| `onUpdate` 仅对 `DateTime` / `DateTimeOffset` 类型有效                   | 解析失败                            |
-| 数据操作节点的 `stage` 仅允许 `before` / `after`                         | 解析失败                            |
-| `DateTimeOffset` 映射到 MySQL/MariaDB 时输出警告                         | 警告（W003）                        |
-| 文件含 CRLF 或 UTF-8 BOM（会导致 checksum 漂移）                         | 警告                                |
-| 文件名必须以 8 位日期开头且 `id` 与文件名一致                            | `check` 命令报错                    |
-| 跨变更单元检测：重复 ADD / MODIFY 冲突 / DROP 不存在列 / RENAME 目标冲突 | `check` 命令报错                    |
-| 补丁文件必须用 `depends` 声明依赖的原变更单元                            | `check` 命令报错                    |
+| 规则                                                                     | 错误处理                                     |
+| ------------------------------------------------------------------------ | -------------------------------------------- |
+| `id` 必须与文件名前缀一致                                                | 解析失败                                     |
+| `release` 必填，格式 `yyyyMMdd`，不得晚于当前 + 1 天                     | 解析失败                                     |
+| `type` 必须在 `LogicalType` 枚举内                                       | 解析失败                                     |
+| `FixedString` / `String` / `Binary` 必须显式提供 `length`                | 解析失败                                     |
+| `Blob` 的 `length` 属性被忽略，输出警告                                  | 警告                                         |
+| `RENAME` 必须提供 `renamedFrom`                                          | 解析失败                                     |
+| `RENAME` 之后，同单元内仍引用旧列名 / 旧表名                             | `check` 命令报错                             |
+| `MODIFY` 在 full 模式下必须声明 `type` 与 `nullable`（见 4.5.5）         | 解析失败                                     |
+| `MODIFY` 在 incremental 模式（默认）下至少声明一项                       | 解析失败                                     |
+| 增量补全基底缺失（无基线 / 表列不在累积模型）                            | 警告（W014）并按已写内容退化                 |
+| `MODIFY` 在 full 模式下未声明 `defaultValue`（= 目标无默认值）           | 警告（W008）                                 |
+| `foreignKey` 格式必须为 `表名.列名`                                      | 解析失败                                     |
+| 同一 `changeUnit` 内，同一表同一列不得重复出现                           | 解析失败                                     |
+| `rawSql` 直接写文本时不区分方言；旧写法（子 `<sql dialect>`）缺当前方言  | 编译时跳过 + 警告（W032）                    |
+| `DROP_TABLE` / `DROP_COLUMN` 必须有显式 `allowDestructive` 配置          | 解析失败                                     |
+| `unsigned=true` 仅对整数类型有效                                         | 解析失败                                     |
+| `onUpdate` 仅对 `DateTime` / `DateTimeOffset` 类型有效                   | 解析失败                                     |
+| 数据操作节点的 `stage` 仅允许 `before` / `after`                         | 解析失败                                     |
+| `DateTimeOffset` 映射到 MySQL/MariaDB 时输出警告                         | 警告（W003）                                 |
+| 文件含 CRLF 或 UTF-8 BOM（会导致 checksum 漂移）                         | 警告                                         |
+| 文件名必须以 8 位日期开头且 `id` 与文件名一致                            | `check` 命令报错                             |
+| 跨变更单元检测：重复 ADD / MODIFY 冲突 / DROP 不存在列 / RENAME 目标冲突 | `check` 命令报错                             |
+| 补丁文件必须用 `depends` 声明依赖的原变更单元                            | `check` 命令报错                             |
 | 已应用的 `change_id`，checksum 必须与 `version_log` 一致                 | `verify-checksum` 命令报错，`apply` 拒绝执行 |
-| `<view>` 必须提供 `<select>` 或按方言的 `<sql>`                          | 解析失败（E048）                    |
-| `<sequence>` 必须提供 `name`                                             | 解析失败（E049）                    |
-| `<constraintComment>` 必须提供 `name`                                    | 解析失败（E043）                    |
-| `<table action="ENGINE/CHARSET/TABLESPACE">` 至少给一个选项值            | 解析失败（E050）                    |
-| `<rawSql>` 内容不得为空                                                  | 解析失败（E051）                    |
+| `<view>` 必须提供 `<select>` 或按方言的 `<sql>`                          | 解析失败（E048）                             |
+| `<sequence>` 必须提供 `name`                                             | 解析失败（E049）                             |
+| `<constraintComment>` 必须提供 `name`                                    | 解析失败（E043）                             |
+| `<table action="ENGINE/CHARSET/TABLESPACE">` 至少给一个选项值            | 解析失败（E050）                             |
+| `<rawSql>` 内容不得为空                                                  | 解析失败（E051）                             |
 
 #### 4.5.11 MVP 范围建议
 
@@ -2652,28 +2652,28 @@ public sealed class CompileDiagnostic
 
 **诊断码（一期）：**
 
-| 码   | 触发                                                                       |
-| ---- | -------------------------------------------------------------------------- |
-| W001 | `unsigned=true` 被非 MySQL 方言忽略                                        |
-| W002 | `onUpdate` 被非 MySQL 方言忽略                                             |
-| W003 | `DateTimeOffset` 映射到 MySQL / MariaDB 的 `TIMESTAMP`                     |
-| W004 | `Xml` 降级为文本类型（MySQL / MariaDB / SQLite）                           |
-| W005 | `Blob` 的 `length` 被忽略                                                  |
-| W006 | 表注释被方言跳过（SQL Server / SQLite）                                    |
-| W007 | 列注释被方言跳过（SQL Server / SQLite）                                    |
-| W008 | `MODIFY` 未声明 `defaultValue`（目标将无默认值）                           |
-| W009 | 文件字节不符合约定（CRLF / UTF-8 BOM），由 `check` 输出                    |
-| W010 | 列顺序（`AFTER` / `FIRST` / `REORDER`）被执行方言忽略                      |
-| W012 | `release` 与 `change_id` 日期不一致                                        |
-| W013 | 同一 `release` 跨天提交                                                    |
-| W014 | 增量补全基底缺失（无基线 / 表不在链 / 列不在链），该列退化为按已写内容生成 |
-| W015 | 列级 `charset` / `collate` 被非 MySQL 方言忽略                             |
-| W016 | 列级 `foreignKey` 被忽略（MySQL 的 `ADD/MODIFY COLUMN` 不支持内联外键）    |
-| W017 | 索引 `type` 不被方言支持（`FULLTEXT` 等），按普通索引生成                  |
-| W018 | 表级 `REBUILD` 仅做破坏性校验，未生成重建 SQL                              |
-| W019 | 配置项 `includeRollback` 当前不生效（回滚请用 `rollback --target-release`）    |
-| W021 | `table="*"` 展开为 N 张表（列出表名）                                      |
-| W022 | `table="*"` 离线编译保留为占位符，需 `apply` 连库后展开                    |
+| 码   | 触发                                                                        |
+| ---- | --------------------------------------------------------------------------- |
+| W001 | `unsigned=true` 被非 MySQL 方言忽略                                         |
+| W002 | `onUpdate` 被非 MySQL 方言忽略                                              |
+| W003 | `DateTimeOffset` 映射到 MySQL / MariaDB 的 `TIMESTAMP`                      |
+| W004 | `Xml` 降级为文本类型（MySQL / MariaDB / SQLite）                            |
+| W005 | `Blob` 的 `length` 被忽略                                                   |
+| W006 | 表注释被方言跳过（SQL Server / SQLite）                                     |
+| W007 | 列注释被方言跳过（SQL Server / SQLite）                                     |
+| W008 | `MODIFY` 未声明 `defaultValue`（目标将无默认值）                            |
+| W009 | 文件字节不符合约定（CRLF / UTF-8 BOM），由 `check` 输出                     |
+| W010 | 列顺序（`AFTER` / `FIRST` / `REORDER`）被执行方言忽略                       |
+| W012 | `release` 与 `change_id` 日期不一致                                         |
+| W013 | 同一 `release` 跨天提交                                                     |
+| W014 | 增量补全基底缺失（无基线 / 表不在链 / 列不在链），该列退化为按已写内容生成  |
+| W015 | 列级 `charset` / `collate` 被非 MySQL 方言忽略                              |
+| W016 | 列级 `foreignKey` 被忽略（MySQL 的 `ADD/MODIFY COLUMN` 不支持内联外键）     |
+| W017 | 索引 `type` 不被方言支持（`FULLTEXT` 等），按普通索引生成                   |
+| W018 | 表级 `REBUILD` 仅做破坏性校验，未生成重建 SQL                               |
+| W019 | 配置项 `includeRollback` 当前不生效（回滚请用 `rollback --target-release`） |
+| W021 | `table="*"` 展开为 N 张表（列出表名）                                       |
+| W022 | `table="*"` 离线编译保留为占位符，需 `apply` 连库后展开                     |
 
 | W023 | MySQL 5.7 接受 `CHECK` 语法但不生效                                            |
 | W024 | MySQL 5.7 不支持 `ALTER COLUMN ... SET/DROP DEFAULT`                            |
@@ -3049,8 +3049,8 @@ db-chronicle apply --config DbchronicleConfig.xml --mark-applied 00000000_000000
 | 能力                          | 一期       | 说明                                 |
 | ----------------------------- | ---------- | ------------------------------------ |
 | 语言类型映射表                | ✅ 文档定义 | 5.2.3 节                             |
-| C# 实体反向扫描（程序集反射） | ⚠️ 可选     | `scan --from assembly`                    |
-| C# 源码扫描（Roslyn）         | ❌ 二期     | `scan --from source`                      |
+| C# 实体反向扫描（程序集反射） | ⚠️ 可选     | `scan --from assembly`               |
+| C# 源码扫描（Roslyn）         | ❌ 二期     | `scan --from source`                 |
 | 种子逻辑模型生成              | ⚠️ 可选     | 生成 XML，人工确认                   |
 | 基线冻结机制                  | ✅ 必须     | `baseline` 配置 + `version_log` 记录 |
 | 数据库反向扫描                | ❌ 二期     | 从现有数据库提取                     |
@@ -3687,6 +3687,14 @@ db-chronicle compile --config DbchronicleConfig.xml
 db-chronicle compile --config DbchronicleConfig.xml --pending --split --output-dir ./pending-sql
 db-chronicle compile --config DbchronicleConfig.xml --change-id 20261022_100000_a1b2c3 --split --output-dir ./one
 
+# 不落盘：结果按分隔符文本记录写到 stdout（或命名管道），调用方边读边执行
+# 协议见 Docs/DbChronicle 管道协议（分隔符文本）.md
+db-chronicle compile --config DbchronicleConfig.xml --pending --emit pipe
+db-chronicle compile --config DbchronicleConfig.xml --pending --pipe dbchronicle-upgrade
+
+# 零配置模式（嵌入式宿主）：不读也不生成配置文件，全部取值来自命令行
+db-chronicle compile --no-config --migrations ./migrations --dialect postgres --allow-destructive --emit pipe
+
 # 应用到数据库（checksum 强校验，按 (release, change_id) 排序执行）
 db-chronicle apply --config DbchronicleConfig.xml
 
@@ -3736,28 +3744,31 @@ db-chronicle init --dialect postgresql --version 16
 
 **命令表：**
 
-| 命令                          | 是否连接数据库      | 说明                                                         |
-| ----------------------------- | ------------------- | ------------------------------------------------------------ |
-| `init`                        | 否                  | 初始化配置                                                   |
-| `new`                         | 否                  | 生成变更单元，**不覆盖同名文件**                             |
-| `compile`                     | 否                  | 编译为 SQL                                                   |
-| `compile --pending`           | 否（读本地状态）    | 只编译未应用的单元                                           |
-| `compile --change-id <id>`    | 否                  | 只编译指定单元                                               |
-| `compile --split --output-dir <dir>` | 否            | 每单元每方言一个文件，**每行一条语句**（供外部程序逐行执行） |
-| `upgrade`（别名 `apply`）     | 是                  | 执行待应用的变更单元，**checksum 强校验**                    |
-| `upgrade --dry-run`           | 是（只读）          | 检测冲突，输出 SQL 但不执行                                  |
-| `upgrade --backfill-logs`     | 是（只读 + 写文件） | 补生成缺失的日志文件                                         |
-| `upgrade --mark-applied`      | 是（写状态文件）    | 半态人工修正后标记为已应用                                   |
-| `upgrade --continue-on-error` | 是                  | 失败后继续其余表 / 单元，最终汇总失败清单                    |
-| `status`                      | 否（读本地状态）    | 查看版本托管状态                                             |
-| `status --release`            | 否（读本地状态）    | 按 release 查询                                              |
-| `check`                       | 否                  | 检测语义冲突（含完整编译诊断）                               |
-| `check --strict-warnings`     | 否                  | 编译警告升级为失败（CI 门禁）                                |
-| `verify-checksum`                      | 否（读本地状态）    | 校验已应用文件 checksum                                      |
-| `scan --from assembly`             | 否                  | 从 C# 程序集（反射）生成基线草案                             |
-| `scan --from source`               | 否                  | 从源码生成基线草案（`--lang` 选择语言）                      |
-| `scan --from database`                     | 是（只读）          | 从现有数据库反向生成基线草案（5 方言）                       |
-| `codegen`                     | 否                  | 由 migrations 生成实体代码（4 种语言）                       |
+| 命令                                    | 是否连接数据库      | 说明                                                               |
+| --------------------------------------- | ------------------- | ------------------------------------------------------------------ |
+| `init`                                  | 否                  | 初始化配置                                                         |
+| `new`                                   | 否                  | 生成变更单元，**不覆盖同名文件**                                   |
+| `compile`                               | 否                  | 编译为 SQL                                                         |
+| `compile --pending`                     | 否（读本地状态）    | 只编译未应用的单元                                                 |
+| `compile --change-id <id>`              | 否                  | 只编译指定单元                                                     |
+| `compile --split --output-dir <dir>`    | 否                  | 每单元每方言一个文件，**每行一条语句**（供外部程序逐行执行）       |
+| `compile --emit pipe` / `--pipe <name>` | 否                  | 不落盘：按分隔符文本记录写 stdout / 命名管道（声明式升级链路使用） |
+| `compile --migrations <dir>`            | 否                  | 零配置模式：不读也不生成配置文件，直接用该目录（嵌入式宿主）       |
+| `compile --no-config`                   | 否                  | 完全脱离配置文件；全部配置项均有对应命令行参数（见管道协议文档）   |
+| `upgrade`（别名 `apply`）               | 是                  | 执行待应用的变更单元，**checksum 强校验**                          |
+| `upgrade --dry-run`                     | 是（只读）          | 检测冲突，输出 SQL 但不执行                                        |
+| `upgrade --backfill-logs`               | 是（只读 + 写文件） | 补生成缺失的日志文件                                               |
+| `upgrade --mark-applied`                | 是（写状态文件）    | 半态人工修正后标记为已应用                                         |
+| `upgrade --continue-on-error`           | 是                  | 失败后继续其余表 / 单元，最终汇总失败清单                          |
+| `status`                                | 否（读本地状态）    | 查看版本托管状态                                                   |
+| `status --release`                      | 否（读本地状态）    | 按 release 查询                                                    |
+| `check`                                 | 否                  | 检测语义冲突（含完整编译诊断）                                     |
+| `check --strict-warnings`               | 否                  | 编译警告升级为失败（CI 门禁）                                      |
+| `verify-checksum`                       | 否（读本地状态）    | 校验已应用文件 checksum                                            |
+| `scan --from assembly`                  | 否                  | 从 C# 程序集（反射）生成基线草案                                   |
+| `scan --from source`                    | 否                  | 从源码生成基线草案（`--lang` 选择语言）                            |
+| `scan --from database`                  | 是（只读）          | 从现有数据库反向生成基线草案（5 方言）                             |
+| `codegen`                               | 否                  | 由 migrations 生成实体代码（4 种语言）                             |
 
 ### 8.2 status 输出
 
@@ -3809,20 +3820,20 @@ db-chronicle init --dialect postgresql --version 16
 
 ### 8.3 发布形态
 
-| 形态        | 命令                                     | 适用                      |
-| ----------- | ---------------------------------------- | ------------------------- |
-| Global Tool | `dotnet tool install -g DbChronicle.Cli` | 开发者                    |
-| 自包含 exe  | `dotnet publish -f net8.0 --self-contained`        | DBA / 服务器 / 跨语言调用 |
+| 形态        | 命令                                        | 适用                      |
+| ----------- | ------------------------------------------- | ------------------------- |
+| Global Tool | `dotnet tool install -g DbChronicle.Cli`    | 开发者                    |
+| 自包含 exe  | `dotnet publish -f net8.0 --self-contained` | DBA / 服务器 / 跨语言调用 |
 
 **插件化发布**：CLI 是命令宿主，数据库执行与源码扫描由插件提供，两条分发通道。
 
 **① NuGet（dotnet tool 变体包）** —— `Tools/pack.ps1`
 
-| 包                       | 内含插件 | 体积（实测） | 说明                                            |
-| ------------------------ | -------- | ------------ | ----------------------------------------------- |
-| `DbChronicle.Cli`        | 无       | 0.18 MB      | 只要 `compile` / `check` / `status` / `codegen` |
+| 包                       | 内含插件 | 体积（实测） | 说明                                                         |
+| ------------------------ | -------- | ------------ | ------------------------------------------------------------ |
+| `DbChronicle.Cli`        | 无       | 0.18 MB      | 只要 `compile` / `check` / `status` / `codegen`              |
 | `DbChronicle.Cli.AdoNet` | `adonet` | 17.3 MB      | 追加 `upgrade` / `scan --from database` / `rollback --apply` |
-| `DbChronicle.Cli.All`    | 三个全带 | 22.4 MB      | 装完即用，用 `plugin disable` 关掉不需要的      |
+| `DbChronicle.Cli.All`    | 三个全带 | 22.4 MB      | 装完即用，用 `plugin disable` 关掉不需要的                   |
 
 装完全量包后可按需启停（状态存用户目录，`dotnet tool update` 不恢复）：
 
@@ -3834,26 +3845,26 @@ db-chronicle plugin enable scanner-source
 
 **② zip（离线 / 自包含 / 内网）** —— `Tools/publish.ps1`：
 
-| 组合      | 命令                               | 体积（实测）         | 可用能力                                                                                         |
-| --------- | ---------------------------------- | -------------------- | ------------------------------------------------------------------------------------------------ |
+| 组合      | 命令                               | 体积（实测）         | 可用能力                                                                                                       |
+| --------- | ---------------------------------- | -------------------- | -------------------------------------------------------------------------------------------------------------- |
 | 基础包    | `./Tools/publish.ps1 -Output dist` | 约 1 MB              | `init` `new` `compile` `check` `status` `verify-checksum` `rollback`(dry-run) `codegen` `scan --from assembly` |
-| + 执行器  | `-Plugins adonet`                  | +17.7 MB（四个驱动） | 追加 `upgrade` `scan --from database` `rollback --apply`                                                      |
-| + C# 源码 | `-Plugins source`                  | +9.4 MB（Roslyn）    | 追加 `scan --from source --language csharp`                                                               |
-| + 多语言  | `-Plugins languages`               | 约 +50 KB            | 追加 `scan --from source --language java\|go\|typescript\|auto`                                           |
-| 全量      | `-Plugins all`                     | 约 28 MB             | 全部                                                                                             |
+| + 执行器  | `-Plugins adonet`                  | +17.7 MB（四个驱动） | 追加 `upgrade` `scan --from database` `rollback --apply`                                                       |
+| + C# 源码 | `-Plugins source`                  | +9.4 MB（Roslyn）    | 追加 `scan --from source --language csharp`                                                                    |
+| + 多语言  | `-Plugins languages`               | 约 +50 KB            | 追加 `scan --from source --language java\|go\|typescript\|auto`                                                |
+| 全量      | `-Plugins all`                     | 约 28 MB             | 全部                                                                                                           |
 
 ### 8.4 退出码
 
 CI 靠退出码判断成败，不能依赖 stdout 文本。所有命令统一使用下表（一期实现）：
 
-| 码  | 含义                                                                    | 典型命令                            |
-| --- | ----------------------------------------------------------------------- | ----------------------------------- |
-| 0   | 成功；`status` 表示"数据库已是最新"                                     | 全部                                |
-| 1   | 参数错误 / 前置校验失败（文件名不合规、`release` 格式错、缺 `depends`） | 全部                                |
-| 2   | 有待应用变更（仅 `status` 使用，用于 CI 判断"是否需要跑 apply"）        | `status`                            |
-| 3   | 执行失败 / 校验失败（SQL 报错、checksum 不一致、文件丢失）              | `apply` `verify-checksum`                    |
-| 4   | 无法获取库级互斥锁（另一进程正在 apply）                                | `apply`                             |
-| 5   | 环境问题（连接失败、非交互环境缺 `DBCHRONICLE_CONN`）                   | 需要连接的命令                      |
+| 码  | 含义                                                                    | 典型命令                                              |
+| --- | ----------------------------------------------------------------------- | ----------------------------------------------------- |
+| 0   | 成功；`status` 表示"数据库已是最新"                                     | 全部                                                  |
+| 1   | 参数错误 / 前置校验失败（文件名不合规、`release` 格式错、缺 `depends`） | 全部                                                  |
+| 2   | 有待应用变更（仅 `status` 使用，用于 CI 判断"是否需要跑 apply"）        | `status`                                              |
+| 3   | 执行失败 / 校验失败（SQL 报错、checksum 不一致、文件丢失）              | `apply` `verify-checksum`                             |
+| 4   | 无法获取库级互斥锁（另一进程正在 apply）                                | `apply`                                               |
+| 5   | 环境问题（连接失败、非交互环境缺 `DBCHRONICLE_CONN`）                   | 需要连接的命令                                        |
 | 6   | **缺少所需能力**（执行器 / 扫描器插件未部署到 `plugins/`）              | `upgrade` `scan --from database` `scan --from source` |
 
 **约定：** `upgrade`（历史别名 `apply`，下文叙述统一用 `apply` 指代该命令）在任何非 0 退出前都不得写入 version_log 记录（有事务方言回滚并删除该单元的状态记录，无事务方言保持"半态 + `failure_at` 标记"）。`status` / `verify-checksum` 只读本地状态文件，不需要连接信息，因此不会返回 5。
@@ -3892,12 +3903,12 @@ CLI 不静态绑定任何数据库驱动或语言扫描器，能力全部通过�
 
 **加载时机**
 
-| 命令                                                                                                                            | 需要加载的插件                            |
-| ------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------- |
+| 命令                                                                                                                                          | 需要加载的插件                            |
+| --------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------- |
 | `init` `new` `compile` `check` `status` `verify-checksum` `rollback`(dry-run) `codegen` `scan --from assembly` `plugin list\|disable\|enable` | **无**                                    |
-| `upgrade` / `apply` / `scan --from database` / `rollback --apply`                                                                            | `DbChronicle.Executor.AdoNet`             |
-| `scan --from source --language csharp`                                                                                                   | `DbChronicle.Scanner.Source`（含 Roslyn） |
-| `scan --from source --language java` / `go` / `typescript` / `auto`                                                                      | `DbChronicle.Scanner.Languages`           |
+| `upgrade` / `apply` / `scan --from database` / `rollback --apply`                                                                             | `DbChronicle.Executor.AdoNet`             |
+| `scan --from source --language csharp`                                                                                                        | `DbChronicle.Scanner.Source`（含 Roslyn） |
+| `scan --from source --language java` / `go` / `typescript` / `auto`                                                                           | `DbChronicle.Scanner.Languages`           |
 
 **目录布局与开关**
 
@@ -3942,14 +3953,14 @@ public static class MyPlugin
 
 **命令型插件的分派规则**
 
-| 项 | 行为 |
-| --- | --- |
-| 分派优先级 | 内建命令优先；未命中时查插件注册的命令表（`db-chronicle <plugin-command> [options]`） |
-| 参数传递 | 通过 `ICommandContext`（`Get` / `Has` / `Positional` / `Config` / `Out` / `Error`），不暴露 `CliArguments` |
-| 配置 | `Config` 惰性加载，插件命令不读配置时不受 `DbchronicleConfig.xml` 缺失影响 |
-| 退出码 | 处理函数返回的 `int` 直接作为进程退出码（与内建命令同一套语义） |
-| 查看 | `db-chronicle plugin list` 会列出已注册的插件命令 |
-| 加载失败 | 插件加载异常不会把"未知命令"变成崩溃，仍退回内建 usage |
+| 项         | 行为                                                                                                       |
+| ---------- | ---------------------------------------------------------------------------------------------------------- |
+| 分派优先级 | 内建命令优先；未命中时查插件注册的命令表（`db-chronicle <plugin-command> [options]`）                      |
+| 参数传递   | 通过 `ICommandContext`（`Get` / `Has` / `Positional` / `Config` / `Out` / `Error`），不暴露 `CliArguments` |
+| 配置       | `Config` 惰性加载，插件命令不读配置时不受 `DbchronicleConfig.xml` 缺失影响                                 |
+| 退出码     | 处理函数返回的 `int` 直接作为进程退出码（与内建命令同一套语义）                                            |
+| 查看       | `db-chronicle plugin list` 会列出已注册的插件命令                                                          |
+| 加载失败   | 插件加载异常不会把"未知命令"变成崩溃，仍退回内建 usage                                                     |
 
 ### 8.6 命令与参数命名规范
 
@@ -3957,24 +3968,24 @@ public static class MyPlugin
 
 **命令命名**
 
-| 规则 | 说明 |
-| --- | --- |
-| 动词或动宾短语 | `new` / `compile` / `check` / `status` / `rollback` / `codegen` |
-| 一个概念一个入口 | 反向工程统一走 `scan --from source\|assembly\|database`，不再并列新增 `scan-xxx` 命令 |
-| 易混命令必须区分语义 | `check`（编译期语义冲突）与 `verify-checksum`（已应用文件 checksum）不可混用 |
-| 不造通用词 | 不用 `run` / `exec` / `do` 这类无信息量的名字 |
+| 规则                 | 说明                                                                                  |
+| -------------------- | ------------------------------------------------------------------------------------- |
+| 动词或动宾短语       | `new` / `compile` / `check` / `status` / `rollback` / `codegen`                       |
+| 一个概念一个入口     | 反向工程统一走 `scan --from source\|assembly\|database`，不再并列新增 `scan-xxx` 命令 |
+| 易混命令必须区分语义 | `check`（编译期语义冲突）与 `verify-checksum`（已应用文件 checksum）不可混用          |
+| 不造通用词           | 不用 `run` / `exec` / `do` 这类无信息量的名字                                         |
 
 **参数命名**
 
-| 规则 | 说明 | 反面例子 |
-| --- | --- | --- |
-| kebab-case | 全小写、连字符分隔 | `--outputDir` |
-| 全拼，不用缩写 | `--description` / `--language` / `--output-dir` | `--desc` / `--lang` / `--out` |
-| 名词优先 | 参数描述"目标是什么"，动作放命令名 | `--target-release` 而非 `--to-release` |
-| 正负对称 | 白名单 / 黑名单成对命名 | `--tables` + `--exclude` |
-| 输出参数区分文件与目录 | 目录 `--output-dir`、文件 `--output-file`，不用含糊的 `--out` | 同名参数一处指目录一处指文件 |
-| 开关用形容词或短语 | `--split` / `--pending` / `--strict-warnings` / `--continue-on-error` | 加 `--enable-` / `--do-` 前缀 |
-| 关闭能力用否定式 | `--no-indexes` / `--no-comments` | `--skip-indexes` 与 `--no-xxx` 混用 |
+| 规则                   | 说明                                                                  | 反面例子                               |
+| ---------------------- | --------------------------------------------------------------------- | -------------------------------------- |
+| kebab-case             | 全小写、连字符分隔                                                    | `--outputDir`                          |
+| 全拼，不用缩写         | `--description` / `--language` / `--output-dir`                       | `--desc` / `--lang` / `--out`          |
+| 名词优先               | 参数描述"目标是什么"，动作放命令名                                    | `--target-release` 而非 `--to-release` |
+| 正负对称               | 白名单 / 黑名单成对命名                                               | `--tables` + `--exclude`               |
+| 输出参数区分文件与目录 | 目录 `--output-dir`、文件 `--output-file`，不用含糊的 `--out`         | 同名参数一处指目录一处指文件           |
+| 开关用形容词或短语     | `--split` / `--pending` / `--strict-warnings` / `--continue-on-error` | 加 `--enable-` / `--do-` 前缀          |
+| 关闭能力用否定式       | `--no-indexes` / `--no-comments`                                      | `--skip-indexes` 与 `--no-xxx` 混用    |
 
 **兼容与告警**
 
@@ -3984,16 +3995,16 @@ public static class MyPlugin
 
 **当前别名清单**
 
-| 现行名 | 兼容的旧名 |
-| --- | --- |
-| `--output-dir` / `--output-file` | `--out` |
-| `--description` | `--desc` |
-| `--language` | `--lang` |
-| `--db-version` | `--version`（仅 `init`） |
-| `--target-release` | `--to-release` |
+| 现行名                                  | 兼容的旧名               |
+| --------------------------------------- | ------------------------ |
+| `--output-dir` / `--output-file`        | `--out`                  |
+| `--description`                         | `--desc`                 |
+| `--language`                            | `--lang`                 |
+| `--db-version`                          | `--version`（仅 `init`） |
+| `--target-release`                      | `--to-release`           |
 | `--include-tables` / `--exclude-tables` | `--tables` / `--exclude` |
-| `verify-checksum` | `verify` |
-| `scan --from database` | `scan-db` |
+| `verify-checksum`                       | `verify`                 |
+| `scan --from database`                  | `scan-db`                |
 
 ---
 
@@ -4226,39 +4237,39 @@ CI 流水线调用 `DbChronicle.Cli` 工具，连接信息通过 Secrets 注入�
 
 ## 十二、风险与对策
 
-| 风险                             | 对策                                                                                                                     |
-| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| **文件名相同导致覆盖**           | `FileMode.CreateNew` 绝不覆盖；Git 同名冲突保护；`new` 命令重试                                                          |
-| **补丁直接修改已应用文件**       | checksum 强校验，不一致报错拒绝执行；CI `verify-checksum` 门禁                                                                    |
-| **补丁未用 depends 声明依赖**    | `check` 命令检测，CI 门禁；`new` 命令模板提示                                                                            |
-| **两个补丁针对同一列冲突**       | `check` 命令检测修改目标冲突，CI 门禁                                                                                    |
-| **已应用文件丢失**               | `verify-checksum` 命令检测，报错                                                                                                  |
-| **开发者手动命名文件**           | `check` 命令正则校验，CI 门禁；Pre-commit 钩子本地拦截；IDE 模板提示                                                     |
-| **release 写错日期**             | `check` 校验格式、未来日期、与 change_id 日期一致性                                                                      |
-| **数据库已更新，日志文件未生成** | 日志生成失败不阻塞；下次 apply 补生成；`--backfill-logs` 手动补                                                          |
-| **日志文件存在，数据库无记录**   | 以数据库为准，`status` 输出警告                                                                                          |
-| **多环境日志冲突**               | 按 `environment` 分目录                                                                                                  |
-| **同一 release 跨天提交**        | 允许，按 `(release, change_id)` 排序，`check` 输出警告                                                                   |
+| 风险                             | 对策                                                                                                                         |
+| -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| **文件名相同导致覆盖**           | `FileMode.CreateNew` 绝不覆盖；Git 同名冲突保护；`new` 命令重试                                                              |
+| **补丁直接修改已应用文件**       | checksum 强校验，不一致报错拒绝执行；CI `verify-checksum` 门禁                                                               |
+| **补丁未用 depends 声明依赖**    | `check` 命令检测，CI 门禁；`new` 命令模板提示                                                                                |
+| **两个补丁针对同一列冲突**       | `check` 命令检测修改目标冲突，CI 门禁                                                                                        |
+| **已应用文件丢失**               | `verify-checksum` 命令检测，报错                                                                                             |
+| **开发者手动命名文件**           | `check` 命令正则校验，CI 门禁；Pre-commit 钩子本地拦截；IDE 模板提示                                                         |
+| **release 写错日期**             | `check` 校验格式、未来日期、与 change_id 日期一致性                                                                          |
+| **数据库已更新，日志文件未生成** | 日志生成失败不阻塞；下次 apply 补生成；`--backfill-logs` 手动补                                                              |
+| **日志文件存在，数据库无记录**   | 以数据库为准，`status` 输出警告                                                                                              |
+| **多环境日志冲突**               | 按 `environment` 分目录                                                                                                      |
+| **同一 release 跨天提交**        | 允许，按 `(release, change_id)` 排序，`check` 输出警告                                                                       |
 | **数据库回退**                   | 已实现 `rollback --target-release`（默认 dry-run 生成 SQL，`--apply` 执行；DROP 类与数据操作标 blocker 需人工处理，见 16.3） |
-| 并行开发语义冲突（重复 ADD）     | `check` 命令检测，CI 门禁                                                                                                |
-| 执行时列已存在                   | 变更单元级幂等跳过；MySQL 半态按 6.7 处置（不生成条件块）                                                                |
-| DDL 不能事务回滚（MySQL）        | 执行前备份，破坏性操作二次确认                                                                                           |
-| 类型变更丢数据                   | `MODIFY` 前检查数据兼容性，提供 `dataMigration`                                                                          |
-| 重命名误判为删+增                | 显式 `RENAME` 操作 + `renamedFrom`                                                                                       |
-| 方言边界遗漏                     | 每个方言单元测试覆盖所有操作                                                                                             |
-| 版本表被篡改                     | `checksum` 校验变更单元内容                                                                                              |
-| SQL 拆分错误                     | 方言感知的语句拆分器                                                                                                     |
-| 执行器方言不一致                 | 启动时校验 `executor.DialectName == dialect.Name`                                                                        |
-| 许可证合规                       | CI 扫描所有传递依赖，仅允许 MIT / Apache 2.0 / PostgreSQL / Public Domain                                                |
-| 连接信息泄露                     | 不落盘、不进历史、掩码输入；CI 通过 Secrets 注入环境变量；日志中连接串脱敏                                               |
-| CI 环境交互阻塞                  | `Console.IsInputRedirected` 检测，非交互环境跳过交互，直接检查环境变量                                                   |
-| DateTimeOffset 在 MySQL 语义偏差 | 编译时输出警告，建议用 `DateTime` + 应用层 UTC 约定                                                                      |
-| SQLite rebuild 丢数据            | 执行前备份，rebuild 前校验数据完整性                                                                                     |
-| 非 C# 项目基线生成困难           | 一期手写 XML，二期提供 `Scanner.Database`                                                                                |
-| 无符号整数跨库不一致             | 仅 MySQL/MariaDB 生效，其他方言忽略并警告                                                                                |
-| MariaDB JSON 无原生类型          | 映射为 `LONGTEXT` + `CHECK (JSON_VALID(col))`                                                                            |
-| SQLite 时间格式不一致            | 编译器输出注释，格式一致性由应用层负责                                                                                   |
-| SQL Server 约束名超长            | 截断并追加 8 位哈希                                                                                                      |
+| 并行开发语义冲突（重复 ADD）     | `check` 命令检测，CI 门禁                                                                                                    |
+| 执行时列已存在                   | 变更单元级幂等跳过；MySQL 半态按 6.7 处置（不生成条件块）                                                                    |
+| DDL 不能事务回滚（MySQL）        | 执行前备份，破坏性操作二次确认                                                                                               |
+| 类型变更丢数据                   | `MODIFY` 前检查数据兼容性，提供 `dataMigration`                                                                              |
+| 重命名误判为删+增                | 显式 `RENAME` 操作 + `renamedFrom`                                                                                           |
+| 方言边界遗漏                     | 每个方言单元测试覆盖所有操作                                                                                                 |
+| 版本表被篡改                     | `checksum` 校验变更单元内容                                                                                                  |
+| SQL 拆分错误                     | 方言感知的语句拆分器                                                                                                         |
+| 执行器方言不一致                 | 启动时校验 `executor.DialectName == dialect.Name`                                                                            |
+| 许可证合规                       | CI 扫描所有传递依赖，仅允许 MIT / Apache 2.0 / PostgreSQL / Public Domain                                                    |
+| 连接信息泄露                     | 不落盘、不进历史、掩码输入；CI 通过 Secrets 注入环境变量；日志中连接串脱敏                                                   |
+| CI 环境交互阻塞                  | `Console.IsInputRedirected` 检测，非交互环境跳过交互，直接检查环境变量                                                       |
+| DateTimeOffset 在 MySQL 语义偏差 | 编译时输出警告，建议用 `DateTime` + 应用层 UTC 约定                                                                          |
+| SQLite rebuild 丢数据            | 执行前备份，rebuild 前校验数据完整性                                                                                         |
+| 非 C# 项目基线生成困难           | 一期手写 XML，二期提供 `Scanner.Database`                                                                                    |
+| 无符号整数跨库不一致             | 仅 MySQL/MariaDB 生效，其他方言忽略并警告                                                                                    |
+| MariaDB JSON 无原生类型          | 映射为 `LONGTEXT` + `CHECK (JSON_VALID(col))`                                                                                |
+| SQLite 时间格式不一致            | 编译器输出注释，格式一致性由应用层负责                                                                                       |
+| SQL Server 约束名超长            | 截断并追加 8 位哈希                                                                                                          |
 
 **补充风险（执行与审计）：**
 
@@ -4267,7 +4278,7 @@ CI 流水线调用 `DbChronicle.Cli` 工具，连接信息通过 Secrets 注入�
 | 并发 apply 重复执行 DDL              | 库级互斥锁（6.6）：PG 咨询锁 / MySQL `GET_LOCK` / SQL Server `sp_getapplock` / SQLite 文件锁       |
 | MySQL 执行中途失败留半态             | 版本表记 `failure_at` / `failure_stmt`；一期人工处置 + `apply --mark-applied`；v1.1 语句级续跑     |
 | SQL 语句拆分错误                     | 方言感知单遍状态机（6.5），引号 / 注释 / 块 / `DELIMITER` / `GO` / `$$` 感知；拆分失败在编译期报错 |
-| 换行 / BOM 导致 checksum 漂移        | `.gitattributes` 的 `-text`、UTF-8 无 BOM + LF、`check` 检测、`verify-checksum` 二次判定（4.6.3）           |
+| 换行 / BOM 导致 checksum 漂移        | `.gitattributes` 的 `-text`、UTF-8 无 BOM + LF、`check` 检测、`verify-checksum` 二次判定（4.6.3）  |
 | 用户声明被方言静默丢弃               | 统一诊断码 W001~W013，四处传播（CLI / SQL 文件头 / 审计 md / `check --strict-warnings`）           |
 | `MODIFY` 误清默认值                  | full 模式全量重述 + W008 提示；`incrementalModify: true` 由累积模型补全未写属性（5.10）            |
 | 新建表与索引 / 外键顺序颠倒          | 依赖顺序固定「建表最先、外键最后」（4.2），`check` 报跨单元倒置                                    |
@@ -4299,7 +4310,7 @@ CI 流水线调用 `DbChronicle.Cli` 工具，连接信息通过 Secrets 注入�
 | **已应用文件修改**        | checksum 强校验，不一致拒绝执行          | 补丁必须新增文件，不能改历史                                                               |
 | **补丁依赖**              | 强制 `depends`                           | 明确补丁与原始变更的关系                                                                   |
 | **语义冲突检测**          | `check` 命令 + CI 门禁                   | 跨文件冲突在合并前发现                                                                     |
-| **已应用文件校验**        | `verify-checksum` 命令 + CI 门禁                  | 检测文件是否被修改或丢失                                                                   |
+| **已应用文件校验**        | `verify-checksum` 命令 + CI 门禁         | 检测文件是否被修改或丢失                                                                   |
 | 排序                      | `(release, change_id)` 升序              | 版本优先，同版本按时间                                                                     |
 | 逻辑模型                  | 增量变更单元 XML                         | 不维护全量快照                                                                             |
 | 执行层                    | 接口注入                                 | 核心库零数据库依赖，可插拔                                                                 |
@@ -4328,18 +4339,18 @@ CI 流水线调用 `DbChronicle.Cli` 工具，连接信息通过 Secrets 注入�
 
 **补充决策（执行 / 幂等 / 审计）：**
 
-| 决策点          | 选择                                                | 理由                                                                                 |
-| --------------- | --------------------------------------------------- | ------------------------------------------------------------------------------------ |
-| 幂等边界        | 只做变更单元级，不生成语句级 `IF NOT EXISTS` 条件块 | 条件块需方言元数据探针，产物不可人工审核；半态用事务或续跑解决                       |
-| 排序            | `CREATE TABLE` 最先，`ADD FOREIGN KEY` 最后         | 否则「建表 + 索引 / 外键」必然失败；跨单元只按 `(release, change_id)`                |
-| 数据操作时机    | `stage="before" / "after"` 显式声明                 | 收紧 NOT NULL / CHECK 前通常需要先回填                                               |
-| 执行互斥        | 用数据库原生锁（SQLite 用文件锁），不引入协调服务   | 与"不做独立服务"一致；进程崩溃由数据库会话释放兜底                                   |
-| 审计 SQL 来源   | 落盘快照 + 补生成分级标注，不塞进版本表             | 版本表保持轻量；"重新编译"不是"实际执行"，必须可区分                                 |
-| 语句拆分        | 编译器产出结构化语句，文本拆分只服务 `RawSql`       | 过程语言无法在编译器内解析；拆分错误只在真库暴露                                     |
-| checksum 规范化 | 不做规范化，另用 `verify-checksum` 二次判定区分字节漂移      | 审计真实性依赖"哈希 = 当时字节"，规范化会掩盖实质修改                                |
-| `MODIFY` 语义   | 默认 incremental（只写变化项）                      | MySQL `MODIFY COLUMN` 是整列替换，故增量写法必须由编译器补全；写全的历史文件结果不变 |
-| 增量补全来源    | 离线累积模型（回放 `migrations/`）                  | 保持 `compile` 纯离线；库漂移由 `apply` introspect 复核（v1.1）                      |
-| 补全不可用      | 按列退化为当前声明 + W014，不阻断编译               | 新项目 / 外部表必须能编译；补不到就失败会把可用性拖死                                |
+| 决策点          | 选择                                                    | 理由                                                                                 |
+| --------------- | ------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| 幂等边界        | 只做变更单元级，不生成语句级 `IF NOT EXISTS` 条件块     | 条件块需方言元数据探针，产物不可人工审核；半态用事务或续跑解决                       |
+| 排序            | `CREATE TABLE` 最先，`ADD FOREIGN KEY` 最后             | 否则「建表 + 索引 / 外键」必然失败；跨单元只按 `(release, change_id)`                |
+| 数据操作时机    | `stage="before" / "after"` 显式声明                     | 收紧 NOT NULL / CHECK 前通常需要先回填                                               |
+| 执行互斥        | 用数据库原生锁（SQLite 用文件锁），不引入协调服务       | 与"不做独立服务"一致；进程崩溃由数据库会话释放兜底                                   |
+| 审计 SQL 来源   | 落盘快照 + 补生成分级标注，不塞进版本表                 | 版本表保持轻量；"重新编译"不是"实际执行"，必须可区分                                 |
+| 语句拆分        | 编译器产出结构化语句，文本拆分只服务 `RawSql`           | 过程语言无法在编译器内解析；拆分错误只在真库暴露                                     |
+| checksum 规范化 | 不做规范化，另用 `verify-checksum` 二次判定区分字节漂移 | 审计真实性依赖"哈希 = 当时字节"，规范化会掩盖实质修改                                |
+| `MODIFY` 语义   | 默认 incremental（只写变化项）                          | MySQL `MODIFY COLUMN` 是整列替换，故增量写法必须由编译器补全；写全的历史文件结果不变 |
+| 增量补全来源    | 离线累积模型（回放 `migrations/`）                      | 保持 `compile` 纯离线；库漂移由 `apply` introspect 复核（v1.1）                      |
+| 补全不可用      | 按列退化为当前声明 + W014，不阻断编译                   | 新项目 / 外部表必须能编译；补不到就失败会把可用性拖死                                |
 
 ---
 
@@ -4478,7 +4489,7 @@ Get-Content .\version_log\dev\DbchronicleState.xml
 | 正常       | 有记录          | 有文件   | 一致   | —                                             |
 | 日志缺失   | 有记录          | 无文件   | 不一致 | `apply --backfill-logs` 补生成                |
 | 日志过期   | 无记录          | 有文件   | 不一致 | 以数据库为准，`status` 输出警告，手工删除日志 |
-| 文件被修改 | checksum 不一致 | —        | 不一致 | `verify-checksum` 报错，`apply` 拒绝执行               |
+| 文件被修改 | checksum 不一致 | —        | 不一致 | `verify-checksum` 报错，`apply` 拒绝执行      |
 
 ---
 
@@ -4555,8 +4566,8 @@ Tools/
 | SQL 快照 + md 审计 + `--backfill-logs`                                                                                                           | ✅    | `Migrations/State/VersionLogWriter.cs`                                                                      |
 | 语句级断点续跑（状态文件 `<statements>`）                                                                                                        | ✅    | `VersionStore` + `SchemaExecutor.ExecuteUnit`                                                               |
 | `apply --check-drift`（introspect 比对）                                                                                                         | ✅    | `Migrations/Executor/SchemaIntrospector.cs`                                                                 |
-| `rollback --target-release`（保守版，见 16.3）                                                                                                       | ✅    | `Migrations/Rollback/RollbackPlanner.cs`                                                                    |
-| `scan --from assembly`（C# 实体 → 基线草案）                                                                                                          | ✅    | `Scanner/CSharpScanner.cs`                                                                                  |
+| `rollback --target-release`（保守版，见 16.3）                                                                                                   | ✅    | `Migrations/Rollback/RollbackPlanner.cs`                                                                    |
+| `scan --from assembly`（C# 实体 → 基线草案）                                                                                                     | ✅    | `Scanner/CSharpScanner.cs`                                                                                  |
 | CLI 退出码 0~5                                                                                                                                   | ✅    | `Cli/Program.cs`                                                                                            |
 | 语义冲突检测（重复 ADD / MODIFY 冲突 / ADD-DROP 矛盾 / RENAME 冲突 / 补丁缺 depends / RENAME 后引用旧名 / DROP 不存在列）                        | ✅    | `Compilation/Checks/ChangeChecker.cs`                                                                       |
 | 基线冻结校验（`frozen=true` 时禁止 MODIFY/DROP/RENAME）                                                                                          | ✅    | `Parsing/ChangeUnitParser.cs`（E040）                                                                       |
@@ -4569,7 +4580,7 @@ Tools/
 | 主键 `REPLACE` / 外键 `MODIFY`（生成 DROP + ADD）                                                                                                | ✅    | `Compilation/SchemaCompiler.cs`                                                                             |
 | 宿主工厂入口（`DbChronicleFactory` → `IDbChronicle.DbUpgrade`，支持 dry-run / restart / mark-applied / 库级锁 / 返回 SQL）                       | ✅    | `Embedded/DbChronicleFactory.cs`、`Models/DbUpgradeResult.cs`                                               |
 | `check` 接入完整编译（编译警告进入 `--strict-warnings` 门禁）                                                                                    | ✅    | `Cli/Commands.cs`                                                                                           |
-| `status` / `verify-checksum` 离线（只读本地状态文件，无需连接）                                                                                           | ✅    | `Cli/Commands.cs`                                                                                           |
+| `status` / `verify-checksum` 离线（只读本地状态文件，无需连接）                                                                                  | ✅    | `Cli/Commands.cs`                                                                                           |
 | 执行器方言一致性校验                                                                                                                             | ✅    | `Migrations/Executor/SchemaExecutor.cs`                                                                     |
 | Global Tool 打包（`PackAsTool`）                                                                                                                 | ✅    | `Cli/DbChronicle.Cli.csproj`                                                                                |
 
@@ -4585,7 +4596,7 @@ Tools/
 | 依赖清单                                                 | 含 System.CommandLine   | 未引入                                                                                                                                                              | 见上                                                                                    |
 | `options.includeRollback` / `options.statementDelimiter` | 参与编译选项            | `statementDelimiter` 已生效（传给拆分器）；`includeRollback` 仅解析并输出 W019（回滚走 `rollback` 独立命令）                                                        | 回滚产物无法通用，改为独立命令                                                          |
 | 诊断码范围                                               | W001~W022               | 扩展到 W001~W030（新增 W023~W030）与 E042 / E043、E101~E110                                                                                                         | 覆盖 SQLite / MySQL 5.7 限制、SEED 冲突、rebuild 限制与语义冲突细分                     |
-| `status` / `verify-checksum` 的连接需求                           | 表内标注"是"            | 不连数据库，只读 `version_log` 下的状态文件                                                                                                                         | 状态本就不落库，离线可查更符合定位                                                      |
+| `status` / `verify-checksum` 的连接需求                  | 表内标注"是"            | 不连数据库，只读 `version_log` 下的状态文件                                                                                                                         | 状态本就不落库，离线可查更符合定位                                                      |
 | 表级 `action="REBUILD"`                                  | 重建表                  | 按 `ALTER` 处理（仅做破坏性校验），输出 W018                                                                                                                        | MySQL/PG/SS 的重建语义差异大，SQLite 已由 `RequiresRebuild` 自动处理                    |
 | 表级 `ENGINE` / `CHARSET` / `TABLESPACE`                 | 4.1.2 列出专用 action   | 报 E012 并提示改用 `<rawSql>`                                                                                                                                       | 4.1.11 已规定高级对象统一走 `RawSqlOperation`                                           |
 | `rollback` 对 SQLite 的列定义回滚                        | 未细化                  | 直接标记 blocker："需要整表重建，请手工执行"                                                                                                                        | SQLite 的 `MODIFY` 回滚等价于一次 rebuild（需要完整目标结构），保守阻断比生成半成品安全 |
@@ -4602,15 +4613,15 @@ Tools/
 
 **已于本轮交付（原 16.4 列出）**：
 
-| 项                                   | 交付形态                                                                 |
-| ------------------------------------ | ------------------------------------------------------------------------ |
-| `Scanner.Database`（数据库反向工程） | 核心库 `Scanner/Database/`（5 方言 reader），CLI `scan --from database`               |
-| `CodeGen.*`（XML → 实体）            | 核心库 `CodeGen/`（C# / Java / Go / TypeScript），CLI `codegen`          |
-| `Executor.EfCore`                    | 独立工程 `DbChronicle.Executor.EfCore`（复用宿主 `DbContext`）           |
-| `scan --from source`（Roslyn）            | 独立工程 `DbChronicle.Scanner.Source`，CLI `scan --from source --language csharp` |
+| 项                                   | 交付形态                                                                          |
+| ------------------------------------ | --------------------------------------------------------------------------------- |
+| `Scanner.Database`（数据库反向工程） | 核心库 `Scanner/Database/`（5 方言 reader），CLI `scan --from database`           |
+| `CodeGen.*`（XML → 实体）            | 核心库 `CodeGen/`（C# / Java / Go / TypeScript），CLI `codegen`                   |
+| `Executor.EfCore`                    | 独立工程 `DbChronicle.Executor.EfCore`（复用宿主 `DbContext`）                    |
+| `scan --from source`（Roslyn）       | 独立工程 `DbChronicle.Scanner.Source`，CLI `scan --from source --language csharp` |
 | `Scanner.Java` / `Go` / `TypeScript` | 独立工程 `DbChronicle.Scanner.Languages`，CLI `scan --from source --language java |
-| IDE 插件                             | 未提供：编辑器内直接调用 CLI（`db-chronicle new --description "..."`）          |
-| SQL Server 表/列/索引/约束注释       | `sp_addextendedproperty` / `sp_updateextendedproperty` 自动 upsert       |
+| IDE 插件                             | 未提供：编辑器内直接调用 CLI（`db-chronicle new --description "..."`）            |
+| SQL Server 表/列/索引/约束注释       | `sp_addextendedproperty` / `sp_updateextendedproperty` 自动 upsert                |
 
 ### 16.5 测试现状
 
@@ -4632,20 +4643,20 @@ Tools/
 
 | 交付物           | 路径                                                                  | 说明                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | ---------------- | --------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 变更单元生成     | `db-chronicle new --description "…"`                                         | 生成符合命名规范的文件（`FileMode.CreateNew`，绝不覆盖）；不再提供模板文件与钩子脚本                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| 变更单元生成     | `db-chronicle new --description "…"`                                  | 生成符合命名规范的文件（`FileMode.CreateNew`，绝不覆盖）；不再提供模板文件与钩子脚本                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 | 示例工程         | `Test/samples/`（config + 基线 + 增量）                               | 与 demo / 集成测试同处 Test 下，可直接 `compile --all-dialects` / `check`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | 宿主启动升级示例 | 文档 §6.2（宿主自写 `IHostedService` 调 `IDbChronicle.DbUpgrade()`）  | 组件不内置启动钩子，升级时机由宿主决定                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | 可运行演示       | `Test/DbChronicle.Demo`（默认 MySQL / `--pgsql` / `--config <path>`） | **三个场景共用同一套变更单元（`LogicModels/`）与同一份配置（`Config/DbchronicleConfig.xml`）**，`database dialect` 由场景在内存中覆盖——这正是"一套逻辑模型、多数据库编译"的演示，模型与配置都不按数据库复制；**Demo 不设基线、也不含建表单元**：模型里只有增量单元（表由既有系统创建，Demo 在准备阶段建一张模拟已有的 `nor_user`），没有累积模型基底，因此配置用 `incrementalModify="false"`（full 写法），避免 W014；非 `--config` 模式会把配置固化到演示工作区（`%TEMP%/dbchronicle-demo-*`，迁移目录转绝对路径、状态目录指向工作区），`--config <path>` 完全按外部配置执行；场景只做一次连接 + `SELECT 1` 连通性检查（不建库、不建表，演示表 `useraccess` 需预先存在），随后直接执行升级；状态文件按 `environment` 隔离为 `version_log/mysql`、`version_log/pgsql`，避免不同数据库互相误判已应用；**所有场景统一通过组件 API 调用**：`DbChronicleFactory.Create(executor, o => o.ConfigPath = ...)` 得到 `IDbChronicle`，再调 `Compile` / `Check` / `DbUpgrade` / `Status`；Demo 不引用 `DbChronicle.Cli`，也不演示 `DbChronicleMigrator`（核心库内的另一条编排入口，供工具形态使用）。当前覆盖 MySQL / PostgreSQL / 嵌入式，SQLite 与 SQL Server 待后续（SQLite 的改列必须 rebuild，需要完整表结构，与"无基线"形态冲突）。Demo 只演示**组件核心能力**（解析 / 编译 / 检查 / dry-run / 升级 / 状态），回滚规划、漂移比对、日志补生成属于工具集能力，不在 Demo 范围内 |
 | 演示用逻辑模型   | `Test/DbChronicle.Demo/LogicModels/*.xml`                             | 唯一一套，只有增量单元（表由既有系统创建）；可直接阅读修改（改动会导致 checksum 拒绝，需换库或 `--reset`）                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | CI 工作流模板    | `Docs/ci/github-actions.yml`                                          | 未初始化 Git 时仅作参考；启用 GitHub 后复制到 `.github/workflows/`                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
-| 发布验证         | `dotnet publish Src/DbChronicle.Cli -c Release -f net8.0`                       | 已验证产物 `db-chronicle.exe` 可运行                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
+| 发布验证         | `dotnet publish Src/DbChronicle.Cli -c Release -f net8.0`             | 已验证产物 `db-chronicle.exe` 可运行                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
 
 **真库验证记录：**
 
 | 库                                                | 状态     | 证据                                                                                                                                                                                                      |
 | ------------------------------------------------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | MySQL 5.7 / `snibemiddlewaredb`（127.0.0.1:3806） | ✅ 已实测 | `Test/DbChronicle.Demo --mysql --apply`：introspect 生成基线 → 版本表创建 → `ADD test1`（charset/collate/default/comment）→ `MODIFY msg` 为 `LONGTEXT` → 版本表 2 条记录 → 结构复核通过；二次运行正确跳过 |
-| PostgreSQL / SQL Server                           | ⏳ 未实测 | 方言 SQL 仅有单元断言，需要连接后跑 `apply` / `verify-checksum`                                                                                                                                                    |
+| PostgreSQL / SQL Server                           | ⏳ 未实测 | 方言 SQL 仅有单元断言，需要连接后跑 `apply` / `verify-checksum`                                                                                                                                           |
 
 MySQL 实测中发现并修复的问题（已加回归测试）：
 
@@ -4664,7 +4675,7 @@ MySQL 实测中发现并修复的问题（已加回归测试）：
 | SQLite          | rebuild 提前到索引 / 数据操作之前（索引不再被 `DROP TABLE` 抹掉）；类型存储类变化时生成 `CAST`；输出 W030 说明不恢复历史索引 / 外键 / 检查约束                                                                                                                                                                                                                                                                                       |
 | 拆分器          | 新增 `$$` / `$tag$`、方括号、嵌套块注释、`GO n`、`BEGIN·CASE·IF·LOOP` 栈（区分 `IF(...)` 与 `IF [NOT] EXISTS`）；未闭合即 E042                                                                                                                                                                                                                                                                                                       |
 | 解析 / 检查     | 新增 E025–E029、E101–E110、W013、W023–W030；`check` 接入完整编译；重复 id 检测                                                                                                                                                                                                                                                                                                                                                       |
-| CLI             | 缺连接信息退出码 5；`--config` 未显式指定时自动生成默认配置；`status` / `verify-checksum` 离线                                                                                                                                                                                                                                                                                                                                                |
+| CLI             | 缺连接信息退出码 5；`--config` 未显式指定时自动生成默认配置；`status` / `verify-checksum` 离线                                                                                                                                                                                                                                                                                                                                       |
 | 宿主入口        | `DbChronicleFactory` 的 `DbUpgrade` 补齐 `DryRun` / `Restart` / `MarkAppliedChangeId` / `ConnectionString`+`LockFactory` / `LockTimeoutSeconds`，并返回 `Sql`；Demo 的 SQLite / MySQL / Embedded 三个场景统一改用工厂入口，运维命令（drift / rollback）仍走编排器                                                                                                                                                                    |
 | 工程分层        | 新增 `DbChronicle.Executor.AdoNet` 独立库（执行器 + 库级锁 + 四个驱动），CLI、集成测试、Demo 均改为引用它；Demo 不再引用 CLI 工程，成为真正的「宿主脱离 CLI」示例                                                                                                                                                                                                                                                                    |
 | Demo 定位       | SQLite 场景收敛为「初始化 → 逻辑模型 → 编译与检查 → dry-run → 升级 → 状态与 checksum」六步，移除回滚计划与漂移比对；Demo 工程内不再出现 CLI 字样（内部命名空间改为 `DbChronicle.Demo.CommandLine`），依赖只有 Core + Executor.AdoNet                                                                                                                                                                                                 |
@@ -4683,7 +4694,7 @@ MySQL 实测中发现并修复的问题（已加回归测试）：
 | 执行诊断        | 语句失败改抛 `StatementExecutionException`，错误信息包含表名、组内/整体语句序号与此前已完成数量；每个单元的输出只保留三样：「一行 SQL（多表单元把表名替换为 `*`，并注明共 N 条）→ 一行 `完成：共 N 张表，成功 X，失败 Y` → 失败明细一条一行」；不再打印单元头（`应用 xxx（N 条语句）`）、通配符展开清单、重复的 SQL 行与最终失败汇总                                                                                                 |
 | 失败继续        | 新增 `ApplyOptions.ContinueOnError`（`bool?`）/ `DbUpgradeOptions.ContinueOnError` / CLI `--continue-on-error`；**默认按方言**：无事务 DDL 的 MySQL / MariaDB 默认"记录失败并继续"（中止也不会回滚，只会白白放弃剩余表），事务方言默认遇错即停（保持单元原子性）。表级模式失败只回滚当前组并继续下一批，语句级模式跳过该表剩余语句继续下一张表，单元之间失败继续下一单元；结果以 `Failures` / `FailedCount` 汇总并令 `Success=false` |
 | PG 布尔默认值   | `FormatDefaultValue` 改为 virtual，`PostgreSqlDialect` 将 `true`/`false` 输出为 PG 字面量（此前统一转成 `1`/`0`，PG 的 boolean 列报 `42804`）                                                                                                                                                                                                                                                                                        |
-| 工程化          | 新增 `.gitattributes`（migrations 不做换行转换）、`.editorconfig`、`.gitignore` 运行期产物；CI 改用 `dotnet-project-licenses` 并增加 `verify-checksum` 门禁；补 README                                                                                                                                                                                                                                                                        |
+| 工程化          | 新增 `.gitattributes`（migrations 不做换行转换）、`.editorconfig`、`.gitignore` 运行期产物；CI 改用 `dotnet-project-licenses` 并增加 `verify-checksum` 门禁；补 README                                                                                                                                                                                                                                                               |
 
 **升级提示**：旧版本（≤ 2026-10-22）在事务方言失败时可能留下「无 `failure` 标记的已应用记录」，新版无法自动区分。升级后请用 `status` 核对历史单元；若库中确无对应结构，手工删除 `DbchronicleState.xml` 中该 `<applied>` 节点后重跑 `apply`。
 

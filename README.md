@@ -29,6 +29,13 @@ dotnet run --project Src/DbChronicle.Cli -f net8.0 -- compile --config Dbchronic
 # 编译成「每行一条语句」的文件，交给外部程序（C++ / Java）逐行执行
 dotnet run --project Src/DbChronicle.Cli -f net8.0 -- compile --config DbchronicleConfig.xml --split --output-dir ./output
 
+# 不落盘：结果按分隔符文本记录写到 stdout（或命名管道），调用方边读边执行
+dotnet run --project Src/DbChronicle.Cli -f net8.0 -- compile --config DbchronicleConfig.xml --emit pipe
+dotnet run --project Src/DbChronicle.Cli -f net8.0 -- compile --config DbchronicleConfig.xml --pipe dbchronicle-upgrade
+
+# 零配置（嵌入式宿主用）：完全不读也不生成配置文件，全部取值来自命令行
+dotnet run --project Src/DbChronicle.Cli -f net8.0 -- compile --no-config --migrations ./migrations --dialect postgres --allow-destructive --emit pipe
+
 # 语义检查（重复 ADD / MODIFY 冲突 / DROP 不存在列 / 跨单元顺序 …）
 dotnet run --project Src/DbChronicle.Cli -f net8.0 -- check --config DbchronicleConfig.xml --strict-warnings
 
@@ -139,6 +146,7 @@ Src/
     Configuration/            配置加载（DbchronicleConfig.xml）
     Models/                   逻辑模型：变更单元 / 操作定义（Operations/）/ 结构模型 / 各 Options 与 Result
     Parsing/                  变更单元 XML 解析 + checksum
+    Piping/                   分隔符文本记录协议（PipeRecordWriter / PipeRecordReader，供宿主与外部程序复用）
     Compilation/              模型 → 方言 SQL（Compiler / Dialects / Checks）
     Migrations/               版本编排（Executor / State / Rollback / Templates）
     Scanner/                  C# 实体反射扫描 + BaselineXmlWriter + Database/（5 方言反向工程）

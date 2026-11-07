@@ -113,7 +113,7 @@ namespace DbChronicle.Cli
             {
                 { "init", new[] { "dialect", "db-version", "version" } },
                 { "new", new[] { "description", "desc", "release", "author" } },
-                { "compile", new[] { "output-dir", "out", "split", "all-dialects", "change-id", "pending" } },
+                { "compile", new[] { "output-dir", "out", "split", "all-dialects", "change-id", "pending", "emit", "pipe", "since" } },
                 { "check", new[] { "strict-warnings" } },
                 { "upgrade", new[] { "dry-run", "mark-applied", "restart", "continue-on-error", "check-drift", "backfill-logs" } },
                 { "apply", new[] { "dry-run", "mark-applied", "restart", "continue-on-error", "check-drift", "backfill-logs" } },
@@ -131,7 +131,13 @@ namespace DbChronicle.Cli
                 { "plugin", new string[0] }
             };
 
-        private static readonly string[] GlobalOptions = { "config", "plugin-dir", "unload-plugins", "dialect", "db-version" };
+        private static readonly string[] GlobalOptions = { "config", "no-config", "plugin-dir", "unload-plugins",
+            "dialect", "db-version", "environment", "migrations", "version-log",
+            "baseline", "baseline-frozen", "no-baseline-frozen", "baseline-frozen-at",
+            "quote-identifiers", "no-quote-identifiers", "sql-comments", "no-sql-comments",
+            "include-rollback", "no-include-rollback", "allow-destructive",
+            "incremental-modify", "no-incremental-modify", "statement-delimiter",
+            "lock-timeout", "commit-scope", "commit-batch-size" };
 
         private static void WarnUnknownOptions(string command, CliArguments arguments)
         {
@@ -191,6 +197,9 @@ namespace DbChronicle.Cli
             Console.WriteLine("  new --description <text>");
             Console.WriteLine("                        生成变更单元（可选 --release / --author）");
             Console.WriteLine("  compile               编译为 SQL（不连数据库，--output-dir <dir> / --split / --all-dialects）");
+            Console.WriteLine("                        --since <version> 只编译版本之后的单元（8 位日期按当天 000000 处理）");
+            Console.WriteLine("                        --emit pipe 不写任何文件，把结果按分隔符文本记录写到 stdout");
+            Console.WriteLine("                        --pipe <name> 同上，但写到命名管道 \\\\.\\pipe\\<name>（仅 Windows）");
             Console.WriteLine("  check                 检测语义冲突（不连数据库，--strict-warnings）");
             Console.WriteLine("  upgrade               执行待应用的变更单元，写入状态与审计（别名 apply）");
             Console.WriteLine("                        （--dry-run / --restart / --check-drift /");
@@ -209,7 +218,17 @@ namespace DbChronicle.Cli
             Console.WriteLine("  plugin list|disable|enable <name> 查看/启停已部署的插件（状态存用户目录，工具升级后仍有效）");
             Console.WriteLine();
             Console.WriteLine("通用选项：--config <path>（默认 DbchronicleConfig.xml，缺失时自动生成）");
-            Console.WriteLine("          --dialect <name> / --db-version <ver> 临时覆盖配置里的方言与数据库版本");
+            Console.WriteLine("          --no-config        完全不读也不生成配置文件（等价于旧 --migrations，推荐显式使用）");
+            Console.WriteLine("          --migrations <dir> 变更单元目录（与 --no-config 同用时即零配置模式）");
+            Console.WriteLine("          --dialect <name> / --db-version <ver>");
+            Console.WriteLine("          （别名：postgres / pg / pgsql → postgresql；mssql → sqlserver）");
+            Console.WriteLine("          --environment <name> / --version-log <dir> / --output-dir <dir>");
+            Console.WriteLine("          --baseline <file> / --baseline-frozen / --no-baseline-frozen / --baseline-frozen-at <v>");
+            Console.WriteLine("          --quote-identifiers / --no-quote-identifiers / --sql-comments / --no-sql-comments");
+            Console.WriteLine("          --include-rollback / --no-include-rollback / --allow-destructive");
+            Console.WriteLine("          --incremental-modify / --no-incremental-modify / --statement-delimiter <s>");
+            Console.WriteLine("          --lock-timeout <sec> / --commit-scope <unit|table|batch> / --commit-batch-size <n>");
+            Console.WriteLine("          以上参数与配置文件中的同名字段一一对应，全部可由命令行覆盖");
             Console.WriteLine("输出参数：--output-dir <dir> 指定输出目录；--output-file <file> 指定输出文件");
             Console.WriteLine("          （不传时用配置里的 paths.output；scan / scan-db / codegen 另有各自的默认值）");
             Console.WriteLine("          旧参数 --out 仍兼容，新脚本请用上面两个明确名字");

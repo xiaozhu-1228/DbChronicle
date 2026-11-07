@@ -18,8 +18,11 @@ namespace DbChronicle.Parsing
 {
     public sealed class ChangeUnitParser
     {
+        /// <summary>
+        /// 允许两种命名：{yyyyMMdd_HHmmss}.xml（新建单元）与 {yyyyMMdd}.xml（历史脚本导入，版本号精确到天）。
+        /// </summary>
         private static readonly Regex FileNamePattern =
-            new Regex(@"^\d{8}_.+\.xml$", RegexOptions.IgnoreCase);
+            new Regex(@"^(?:\d{8}|\d{8}_.+)\.xml$", RegexOptions.IgnoreCase);
 
         private readonly DbChronicleConfig _config;
 
@@ -833,7 +836,7 @@ namespace DbChronicle.Parsing
             if (!match.Success)
             {
                 AddError(unit, "E003", null, null,
-                    "文件名不符合规范 {yyyyMMdd_HHmmss}.xml（须以 8 位日期开头）：" + fileName);
+                    "文件名不符合规范 {yyyyMMdd_HHmmss}.xml 或 {yyyyMMdd}.xml（须以 8 位日期开头）：" + fileName);
                 return;
             }
 

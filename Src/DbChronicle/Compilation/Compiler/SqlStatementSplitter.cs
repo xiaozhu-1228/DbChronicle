@@ -35,7 +35,7 @@ namespace DbChronicle.Compilation.Compiler
 
             var buffer = new StringBuilder();
             var state = SqlScanState.Normal;
-            var blockDepth = 0;
+            var blocks = new Stack<string>();
             var commentDepth = 0;
             var delimiter = initialDelimiter;
             var dollarTag = "";
@@ -66,7 +66,7 @@ namespace DbChronicle.Compilation.Compiler
                 switch (state)
                 {
                     case SqlScanState.Normal:
-                        if (blockDepth == 0 && MatchesAt(text, index, delimiter))
+                        if (blocks.Count == 0 && MatchesAt(text, index, delimiter))
                         {
                             FlushBatch(buffer, result, 1);
                             index += delimiter.Length;
@@ -146,7 +146,7 @@ namespace DbChronicle.Compilation.Compiler
                             buffer.Append(word);
                             if (!isSqlServer)
                             {
-                                UpdateBlockDepth(text, word, ref index, ref blockDepth, buffer);
+                                UpdateBlockStack(text, word, ref index, blocks, buffer);
                             }
                             continue;
                         }
@@ -287,7 +287,7 @@ namespace DbChronicle.Compilation.Compiler
                 throw new InvalidOperationException("SQL 拆分失败：存在未闭合的 " + DescribeState(state) + "（位置 " + index + "）");
             }
 
-            if (blockDepth != 0)
+            if (blocks.Count != 0)
             {
                 throw new InvalidOperationException("SQL 拆分失败：语句块未闭合（BEGIN / CASE / IF / LOOP 与 END 不配对）");
             }
@@ -295,15 +295,14 @@ namespace DbChronicle.Compilation.Compiler
             FlushBatch(buffer, result, 1);
         }
 
-        private static void UpdateBlockDepth(string text, string word, ref int index, ref int blockDepth, StringBuilder buffer)
+        /// <summary>
+        /// 维护语句块栈。END 只有在栈顶类型匹配时才出栈，
+        /// 避免 IF ... END IF 把 BEGIN 的层级误减掉导致块内分号被拆开。
+        /// </summary>
+        private static void UpdateBlockStack(string text, string word, ref int index, Stack<string> blocks, StringBuilder buffer)
         {
             if (string.Equals(word, "END", StringComparison.OrdinalIgnoreCase))
             {
-                if (blockDepth > 0)
-                {
-                    blockDepth--;
-                }
-
                 var qualifier = PeekWord(text, index);
                 if (IsBlockQualifier(qualifier))
                 {
@@ -316,6 +315,16 @@ namespace DbChronicle.Compilation.Compiler
                     buffer.Append(text, index, cursor - index);
                     index = cursor;
                     buffer.Append(ReadWord(text, ref index));
+
+                    PopIfMatches(blocks, qualifier.ToUpperInvariant());
+                }
+                else
+                {
+                    // 裸 END（如 CASE ... END、BEGIN ... END）结束最近的块
+                    if (blocks.Count > 0)
+                    {
+                        blocks.Pop();
+                    }
                 }
                 return;
             }
@@ -325,7 +334,16 @@ namespace DbChronicle.Compilation.Compiler
                 return;
             }
 
-            blockDepth++;
+            blocks.Push(word.ToUpperInvariant());
+        }
+
+        /// <summary>只弹出与栈顶类型一致的块，类型不一致时保持原状（容错，避免错拆）。</summary>
+        private static void PopIfMatches(Stack<string> blocks, string type)
+        {
+            if (blocks.Count > 0 && string.Equals(blocks.Peek(), type, StringComparison.Ordinal))
+            {
+                blocks.Pop();
+            }
         }
 
         private static bool OpensBlock(string text, string word, int index)
